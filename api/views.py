@@ -2,8 +2,8 @@
 import csv
 from datetime import date, timedelta
 
-from django.db.models import Case, Count, IntegerField, Q, Sum, When  # type: ignore
-from django.http import HttpResponse  # type: ignore
+from django.db.models import Case, Count, IntegerField, Prefetch, Q, Sum, When  # type: ignore
+from django.http import FileResponse, HttpResponse  # type: ignore
 from drf_spectacular.utils import extend_schema  # type: ignore
 from rest_framework import mixins, status, viewsets  # type: ignore
 from rest_framework.decorators import action  # type: ignore
@@ -12,8 +12,8 @@ from rest_framework.response import Response  # type: ignore
 from rest_framework.views import APIView  # type: ignore
 
 from gestion import services
-from gestion.models import (Bien, Contrat, DemandeContact, Intervention, Locataire, Notification,
-                            Paiement, Reservation)
+from gestion.models import (Bien, Contrat, DemandeContact, Depense, Document, Intervention, Locataire,
+                            Notification, Paiement, Reservation)
 from gestion.pdf_utils import generer_quittance_pdf, generer_rapport_financier_pdf
 from gestion.scope import proprietaires_visibles
 from gestion.utils import mois_annee_fr_abrege
@@ -40,8 +40,19 @@ class BienViewSet(ScopedViewSet):
     search_fields = ['nom', 'adresse', 'ville']
     ordering_fields = ['nom', 'loyer_charges', 'created_at', 'surface']
 
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related(Prefetch(
+            'contrats', queryset=Contrat.objects.filter(statut='actif').select_related('locataire'),
+            to_attr='_contrats_actifs'))
+
     def perform_create(self, serializer):
         serializer.save(proprietaire=self.request.user)
+
+    @extend_schema(responses={200: dict})
+    @action(detail=True, methods=['get'])
+    def rentabilite(self, request, pk=None):
+        """Revenus, dépenses et rendement net du bien sur 12 mois."""
+        return Response(services.rentabilite_bien(self.get_object()))
 
 
 class LocataireViewSet(ScopedViewSet):
@@ -51,8 +62,19 @@ class LocataireViewSet(ScopedViewSet):
     ordering_fields = ['nom', 'created_at']
     select = ('compte',)
 
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related(Prefetch(
+            'contrats', queryset=Contrat.objects.filter(statut='actif').select_related('bien'),
+            to_attr='_contrats_actifs'))
+
     def perform_create(self, serializer):
         serializer.save(proprietaire=self.request.user)
+
+    @extend_schema(responses={200: dict})
+    @action(detail=True, methods=['get'])
+    def score(self, request, pk=None):
+        """Score de fiabilité du locataire (ponctualité des paiements + taux d'effort)."""
+        return Response(services.score_locataire(self.get_object()))
 
     @extend_schema(request=None, responses={200: dict})
     @action(detail=True, methods=['post'])
@@ -386,3 +408,64 @@ class RapportFinancierView(APIView):
         writer.writerow(entetes)
         writer.writerows(lignes())
         return rep
+
+
+class DepenseViewSet(ScopedViewSet):
+    queryset = Depense.objects.all()
+    serializer_class = sz.DepenseSerializer
+    scope_path = 'bien__proprietaire'
+    select = ('bien',)
+    filterset_fields = ['bien', 'categorie']
+    search_fields = ['libelle', 'bien__nom', 'notes']
+    ordering_fields = ['date', 'montant']
+
+    @extend_schema(responses={200: dict})
+    @action(detail=False, methods=['get'])
+    def resume(self, request):
+        """Totaux des 12 derniers mois : revenus encaissés, dépenses par catégorie et résultat net."""
+        prop = proprietaires_visibles(request.user)
+        debut = services.il_y_a_12_mois()
+        depenses = Depense.objects.filter(bien__proprietaire__in=prop, date__gte=debut)
+        revenus = Paiement.objects.filter(contrat__bien__proprietaire__in=prop, mois__gte=debut)
+        total_dep = depenses.aggregate(t=Sum('montant'))['t'] or 0
+        total_rev = revenus.aggregate(t=Sum('montant_paye'))['t'] or 0
+        return Response({
+            'revenus_12m': total_rev, 'depenses_12m': total_dep, 'net_12m': total_rev - total_dep,
+            'par_categorie': [{'categorie': c['categorie'], 'total': c['t']}
+                              for c in depenses.values('categorie').annotate(t=Sum('montant')).order_by('-t')],
+        })
+
+
+class DocumentViewSet(ScopedViewSet):
+    """Pièces jointes. Le fichier est servi par `telecharger` (authentifié), jamais par une URL publique."""
+    queryset = Document.objects.all()
+    serializer_class = sz.DocumentSerializer
+    filterset_fields = ['locataire', 'bien', 'type_document']
+    search_fields = ['titre']
+
+    def get_queryset(self):
+        prop = proprietaires_visibles(self.request.user)
+        return Document.objects.filter(Q(bien__proprietaire__in=prop) | Q(locataire__proprietaire__in=prop))
+
+    @extend_schema(responses={(200, 'application/octet-stream'): bytes})
+    @action(detail=True, methods=['get'])
+    def telecharger(self, request, pk=None):
+        doc = self.get_object()
+        return FileResponse(doc.fichier.open('rb'), as_attachment=True,
+                            filename=doc.fichier.name.rsplit('/', 1)[-1])
+
+
+class CalendrierView(APIView):
+    permission_classes = [IsGestionnaire]
+
+    @extend_schema(responses={200: dict})
+    def get(self, request):
+        try:
+            debut = date.fromisoformat(request.query_params.get('debut', ''))
+            fin = date.fromisoformat(request.query_params.get('fin', ''))
+        except ValueError:
+            raise ValidationError({'debut': 'Dates attendues au format AAAA-MM-JJ (debut et fin).'})
+        if fin < debut or (fin - debut).days > 93:
+            raise ValidationError({'fin': 'La période doit être positive et ne pas dépasser 3 mois.'})
+        return Response({'evenements': services.evenements_calendrier(
+            proprietaires_visibles(request.user), debut, fin)})

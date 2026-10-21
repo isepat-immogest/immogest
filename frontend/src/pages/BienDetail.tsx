@@ -1,17 +1,20 @@
+import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { EmptyState, ErrorState, PageHeader, StatusBadge } from '@/components/common'
+import { DocumentsPanel } from '@/components/DocumentsPanel'
 import { FormDialog } from '@/components/FormDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { api } from '@/lib/api'
 import { STATUT_BIEN, STATUT_CONTRAT, STATUT_INTERVENTION, STATUT_PAIEMENT, PRIORITE } from '@/lib/labels'
 import { useDetail, useList, useSave } from '@/lib/queries'
-import type { Bien, Contrat, Intervention, Paiement } from '@/lib/types'
+import type { Bien, Contrat, Intervention, Paiement, Rentabilite } from '@/lib/types'
 import { formatDate, formatFCFA, formatMois } from '@/lib/utils'
 import { BIEN_FIELDS } from '@/pages/Biens'
 
@@ -30,6 +33,7 @@ export default function BienDetail() {
   const contrats = useList<Contrat>('/contrats', { bien: id, page_size: 50 })
   const paiements = useList<Paiement>('/paiements', { bien: id, ordering: '-mois', page_size: 12 })
   const interventions = useList<Intervention>('/interventions', { bien: id, page_size: 50 })
+  const rentabilite = useQuery({ queryKey: ['/biens', 'rentabilite', id], queryFn: () => api.get<Rentabilite>(`/biens/${id}/rentabilite/`), enabled: !!id })
   const save = useSave<Bien>('/biens')
   const [editing, setEditing] = useState(false)
 
@@ -62,6 +66,20 @@ export default function BienDetail() {
             {b.description && <p className="mt-4 text-sm text-muted-foreground">{b.description}</p>}
           </CardContent>
         </Card>
+        <Card className="lg:col-span-1">
+          <CardHeader><CardTitle>Rentabilité (12 mois)</CardTitle></CardHeader>
+          <CardContent>
+            {rentabilite.data ? (
+              <dl className="grid grid-cols-2 gap-4">
+                <Info label="Revenus encaissés" value={formatFCFA(rentabilite.data.revenus_12m)} />
+                <Info label="Dépenses" value={formatFCFA(rentabilite.data.depenses_12m)} />
+                <Info label="Résultat net" value={<span className={Number(rentabilite.data.net_12m) >= 0 ? 'text-success' : 'text-destructive'}>{formatFCFA(rentabilite.data.net_12m)}</span>} />
+                <Info label="Rendement net" value={rentabilite.data.rendement_net_pct !== null ? `${rentabilite.data.rendement_net_pct} %` : null} />
+              </dl>
+            ) : <Skeleton className="h-20" />}
+            {rentabilite.data && rentabilite.data.rendement_net_pct === null && <p className="mt-3 text-xs text-muted-foreground">Renseignez le prix d&apos;acquisition du bien pour calculer le rendement.</p>}
+          </CardContent>
+        </Card>
 
         <div className="lg:col-span-2">
           <Tabs defaultValue="paiements">
@@ -69,7 +87,9 @@ export default function BienDetail() {
               <TabsTrigger value="paiements">Paiements</TabsTrigger>
               <TabsTrigger value="contrats">Contrats</TabsTrigger>
               <TabsTrigger value="interventions">Interventions</TabsTrigger>
+              <TabsTrigger value="documents">Documents</TabsTrigger>
             </TabsList>
+            <TabsContent value="documents"><DocumentsPanel bien={b.id} /></TabsContent>
             <TabsContent value="paiements">
               <Card><CardContent className="space-y-2 pt-5">
                 {paiements.data?.results.length ? paiements.data.results.map((p) => (

@@ -1,9 +1,10 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Copy, MailPlus, ShieldOff } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import { DocumentsPanel } from '@/components/DocumentsPanel'
 import { ErrorState, PageHeader, StatusBadge } from '@/components/common'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,9 +13,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
-import { STATUT_CONTRAT, STATUT_PAIEMENT } from '@/lib/labels'
+import { NIVEAU_SCORE, STATUT_CONTRAT, STATUT_PAIEMENT } from '@/lib/labels'
 import { invalidateAll, notifyError, useDetail, useList } from '@/lib/queries'
-import type { Contrat, Locataire, Paiement } from '@/lib/types'
+import type { Contrat, Locataire, Paiement, ScoreLocataire } from '@/lib/types'
 import { formatDate, formatFCFA, formatMois } from '@/lib/utils'
 
 interface Invitation {
@@ -29,6 +30,7 @@ export default function LocataireDetail() {
   const loc = useDetail<Locataire>('/locataires', id)
   const contrats = useList<Contrat>('/contrats', { locataire: id, page_size: 50 })
   const paiements = useList<Paiement>('/paiements', { locataire: id, ordering: '-mois', page_size: 12 })
+  const score = useQuery({ queryKey: ['/locataires', 'score', id], queryFn: () => api.get<ScoreLocataire>(`/locataires/${id}/score/`), enabled: !!id })
   const [invitation, setInvitation] = useState<Invitation | null>(null)
 
   const inviter = useMutation({
@@ -87,6 +89,25 @@ export default function LocataireDetail() {
             )) : <p className="text-sm text-muted-foreground">Aucun contrat.</p>}
           </CardContent>
         </Card>
+        <Card className="lg:col-span-3">
+          <CardHeader><CardTitle>Fiabilité du locataire</CardTitle></CardHeader>
+          <CardContent>
+            {score.data ? (
+              <div className="flex flex-wrap items-center gap-6">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-semibold tabular-nums">{score.data.score ?? '—'}</span>
+                  <span className="text-sm text-muted-foreground">/ 100</span>
+                </div>
+                <StatusBadge map={NIVEAU_SCORE} value={score.data.niveau} />
+                <p className="text-sm text-muted-foreground">
+                  {score.data.nb_paiements} loyer(s) échu(s), {score.data.nb_retards} en retard ou partiel(s)
+                  {score.data.taux_effort !== null ? ` · loyer = ${score.data.taux_effort} % du revenu` : ''}
+                </p>
+              </div>
+            ) : <Skeleton className="h-12" />}
+          </CardContent>
+        </Card>
+        <div className="lg:col-span-3"><DocumentsPanel locataire={l.id} /></div>
         <Card className="lg:col-span-3">
           <CardHeader><CardTitle>Historique des loyers</CardTitle></CardHeader>
           <CardContent className="space-y-2">

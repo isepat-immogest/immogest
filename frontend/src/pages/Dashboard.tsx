@@ -124,8 +124,8 @@ export default function Dashboard() {
                     <YAxis tickLine={false} axisLine={false} fontSize={12} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
                     <Tooltip formatter={(v: number) => formatFCFA(v)} contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: 8 }} />
                     <Legend />
-                    <Bar dataKey="Prévu" fill="hsl(var(--muted-foreground) / 0.35)" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="Encaissé" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                    <Bar isAnimationActive={false} dataKey="Prévu" fill="hsl(var(--muted-foreground) / 0.35)" radius={[4, 4, 0, 0]} />
+                    <Bar isAnimationActive={false} dataKey="Encaissé" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -142,7 +142,7 @@ export default function Dashboard() {
               <div className="h-64" role="img" aria-label="Répartition des biens par statut">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={pie} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={3}>
+                    <Pie isAnimationActive={false} data={pie} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={3}>
                       {pie.map((p) => <Cell key={p.key} fill={PIE_COLORS[p.key]} />)}
                     </Pie>
                     <Tooltip contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: 8 }} />

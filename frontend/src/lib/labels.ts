@@ -75,3 +75,28 @@ export const TYPES_BAIL = [
 ]
 
 export const PRIORITES = Object.entries(PRIORITE).map(([value, v]) => ({ value, label: v.label }))
+
+export const CATEGORIES_DEPENSE = [
+  { value: 'taxe', label: 'Taxes et impôts' },
+  { value: 'assurance', label: 'Assurance' },
+  { value: 'travaux', label: 'Travaux' },
+  { value: 'entretien', label: 'Entretien' },
+  { value: 'syndic', label: 'Syndic / charges' },
+  { value: 'autre', label: 'Autre' },
+]
+
+export const TYPES_DOCUMENT = [
+  { value: 'identite', label: "Pièce d'identité" },
+  { value: 'bail', label: 'Bail signé' },
+  { value: 'assurance', label: 'Assurance' },
+  { value: 'justificatif', label: 'Justificatif de revenu' },
+  { value: 'etat_lieux', label: 'État des lieux' },
+  { value: 'autre', label: 'Autre' },
+]
+
+export const NIVEAU_SCORE: Record<string, { label: string; tone: Tone }> = {
+  bon: { label: 'Fiable', tone: 'success' },
+  moyen: { label: 'À surveiller', tone: 'warning' },
+  risque: { label: 'À risque', tone: 'danger' },
+  inconnu: { label: 'Pas assez de données', tone: 'neutral' },
+}

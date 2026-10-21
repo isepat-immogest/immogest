@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Command } from 'cmdk'
-import { Building2, CalendarCheck, FileText, Home, Search, Users, Wallet, Wrench } from 'lucide-react'
+import { Building2, CalendarCheck, CalendarDays, FileText, Home, PiggyBank, Search, Users, Wallet, Wrench } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -16,6 +16,8 @@ const PAGES = [
   { label: 'Paiements', to: '/paiements', icon: Wallet },
   { label: 'Interventions', to: '/interventions', icon: Wrench },
   { label: 'Réservations', to: '/reservations', icon: CalendarCheck },
+  { label: 'Calendrier', to: '/calendrier', icon: CalendarDays },
+  { label: 'Dépenses et rentabilité', to: '/depenses', icon: PiggyBank },
 ]
 
 const ICONS = { bien: Building2, locataire: Users, reservation: CalendarCheck }

@@ -11,6 +11,8 @@ Ce fichier te permet de reprendre le projet et de l'améliorer. Branche de trava
 | Interface React `/app/` (Vite, TS, Tailwind, shadcn/ui, TanStack Query) | ✅ fait, 11 tests Vitest |
 | Site public Django (`/`) | ✅ existant, corrigé (jeton de confirmation, disponibilité) |
 | Ancienne interface `/gestion/` | ⚠️ conservée, à supprimer à terme |
+| Dépenses + rentabilité, calendrier, documents, score locataire, rappels J-3/J-1 | ✅ fait (43 tests pytest) |
+| Fluidité : préchargement, gzip, index SQL, anti N+1, service worker hors-ligne | ✅ fait |
 | Paiement mobile money par API (Wave / Orange Money) | ❌ à faire |
 | Temps réel (WebSocket) | ❌ notifications par polling 30 s |
 
@@ -72,18 +74,18 @@ Règles du projet :
 
 ### P1 — fort impact
 - **Rôles et permissions** : admin / gestionnaire / comptable / lecture seule (modèle `Agence` + `Membre(role)`), permissions DRF par rôle.
-- **Documents** : upload de pièces (identité, bail signé, assurance) par locataire/bien ; **bail PDF** généré automatiquement (s'inspirer de `gestion/pdf_utils.py`).
+- **Bail PDF** généré automatiquement (s'inspirer de `gestion/pdf_utils.py`) ; les documents (upload) existent déjà (`DocumentsPanel`).
 - **Galerie multi-photos** par bien (`PhotoBien`) au lieu d'une seule `photo`.
-- **Calendrier** (FullCalendar) : réservations, échéances de contrats, interventions.
-- **Relances graduées** (J-5, J-1, J+1, J+7) dans `taches_quotidiennes` ; SMS / WhatsApp (Twilio ou API WhatsApp Cloud).
+- **Relances de retard** (J+1, J+7) et SMS / WhatsApp (Twilio ou API WhatsApp Cloud) : les rappels J-3/J-1 par notification + email existent dans `services.envoyer_rappels_echeance`.
+- **Documents en production** : le disque n'est pas persistant sur la plupart des hébergeurs, activer S3 (`USE_S3=True`) avant d'accepter des uploads réels.
 - **Dépôt de garantie** : encaissement, retenues, restitution.
 - **Pagination côté Kanban** et filtre par bien dans `Interventions.tsx` (charge 200 éléments).
 
 ### P2 — confort / « wow »
 - Temps réel : Django Channels ou SSE à la place du polling (`NotificationsBell.tsx`).
-- Dépenses par bien + **rentabilité nette** ; propriétaires multiples et reversements.
-- Scoring locataire (ratio loyer / revenu, historique de retards) ; génération d'annonce par IA.
-- Mode hors-ligne (service worker) ; icônes PNG pour la PWA.
+- Propriétaires multiples et reversements ; génération d'annonce par IA.
+- Mode hors-ligne des **données** (le service worker ne met en cache que la coquille) ; icônes PNG pour la PWA.
+- Vue calendrier en semaine / agenda ; glisser-déposer des événements.
 - Import Excel de biens/locataires (`openpyxl` est déjà installé).
 - Suppression douce (`deleted_at`) à la place de `CASCADE` : supprimer un locataire efface aujourd'hui tous ses contrats et paiements.
 - Journal d'audit (`django-simple-history`).

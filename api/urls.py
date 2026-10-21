@@ -13,6 +13,8 @@ router.register('paiements', views.PaiementViewSet, basename='paiement')
 router.register('interventions', views.InterventionViewSet, basename='intervention')
 router.register('reservations', views.ReservationViewSet, basename='reservation')
 router.register('demandes', views.DemandeViewSet, basename='demande')
+router.register('depenses', views.DepenseViewSet, basename='depense')
+router.register('documents', views.DocumentViewSet, basename='document')
 router.register('notifications', views.NotificationViewSet, basename='notification')
 
 espace = DefaultRouter()
@@ -34,6 +36,7 @@ urlpatterns = [
     # Gestion
     path('dashboard/', views.DashboardView.as_view()),
     path('recherche/', views.SearchView.as_view()),
+    path('calendrier/', views.CalendrierView.as_view()),
     path('rapports/financier/', views.RapportFinancierView.as_view()),
     path('', include(router.urls)),
 

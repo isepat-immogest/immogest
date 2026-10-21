@@ -8,7 +8,7 @@ Application de gestion locative pour le Sénégal (FCFA, Wave / Orange Money / F
 | Backend | Django 5.1, Django REST Framework, JWT (simplejwt), django-filter, drf-spectacular |
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui (Radix), TanStack Query, React Hook Form, Recharts, cmdk |
 | Données | PostgreSQL (prod) / SQLite (dev), PDF reportlab, export Excel openpyxl |
-| Qualité | pytest (31 tests), Vitest (11 tests), GitHub Actions, Docker |
+| Qualité | pytest (43 tests, ~8 s), Vitest (11 tests), GitHub Actions, Docker |
 
 ## Les trois surfaces
 
@@ -33,6 +33,10 @@ python manage.py runserver            # API + site public sur :8000
 cd frontend && npm install && npm run dev      # http://localhost:5173/app/
 ```
 
+Port 8000 déjà pris ? Lancer Django sur un autre port et le dire à Vite :
+`python manage.py runserver 8010` puis `cd frontend && DJANGO_URL=http://127.0.0.1:8010 npm run dev`
+(PowerShell : `$env:DJANGO_URL="http://127.0.0.1:8010"; npm run dev`).
+
 Pour servir l'application React directement par Django (comme en production) :
 `cd frontend && npm run build`, puis ouvrir `http://127.0.0.1:8000/app/`.
 
@@ -45,6 +49,18 @@ Pour servir l'application React directement par Django (comme en production) :
   conversion en contrat saisonnier, page de suivi protégée par un jeton secret.
 - **Notifications** : cloche dans l'application + email à chaque réservation, message ou signalement locataire.
 - **Accès locataire** : lien d'activation à usage unique (plus de mot de passe envoyé en clair).
+- **Dépenses et rentabilité** : charges par bien (taxes, assurance, travaux…), résultat net et rendement sur 12 mois.
+- **Calendrier** : séjours, loyers à payer, fins de bail et interventions sur une seule vue mensuelle.
+- **Documents** : pièces jointes par locataire ou bien (PDF/JPG/PNG, 5 Mo), téléchargement authentifié uniquement.
+- **Score locataire** : fiabilité 0-100 (ponctualité des paiements + taux d'effort loyer/revenu).
+- **Rappels d'échéance** : notification et email aux locataires à J-3 et J-1.
+
+## Fluidité
+
+- Pages chargées à la demande **et préchargées** pendant les temps morts ; données préchargées au survol du menu.
+- Cache TanStack Query (affichage instantané des pages déjà vues), mises à jour optimistes (statuts, Kanban).
+- API sans N+1 (requêtes pré-chargées, vérifié par test), index SQL sur les filtres fréquents, **compression gzip** (-73 % sur les scripts).
+- Service worker : coquille de l'application disponible hors-ligne, scripts en cache ; les réponses de l'API ne sont jamais mises en cache.
 
 ## API
 

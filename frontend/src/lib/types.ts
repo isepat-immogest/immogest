@@ -206,3 +206,63 @@ export interface SearchResult {
   detail: string
   url: string
 }
+
+export interface Depense {
+  id: number
+  bien: number
+  bien_nom: string
+  categorie: string
+  categorie_display: string
+  libelle: string
+  montant: string
+  date: string
+  notes: string
+}
+
+export interface ResumeFinance {
+  revenus_12m: number | string
+  depenses_12m: number | string
+  net_12m: number | string
+  par_categorie: { categorie: string; total: number | string }[]
+}
+
+export interface Rentabilite {
+  revenus_12m: number | string
+  depenses_12m: number | string
+  net_12m: number | string
+  rendement_net_pct: number | null
+  depenses_par_categorie: Record<string, number | string>
+}
+
+export interface ScoreLocataire {
+  score: number | null
+  niveau: 'bon' | 'moyen' | 'risque' | 'inconnu'
+  nb_paiements: number
+  nb_retards: number
+  taux_effort: number | null
+}
+
+export interface DocumentPiece {
+  id: number
+  type_document: string
+  type_display: string
+  titre: string
+  locataire: number | null
+  bien: number | null
+  date_expiration: string | null
+  created_at: string
+  nom_fichier: string
+  taille: number
+}
+
+export type CalendrierType = 'reservation' | 'loyer' | 'contrat' | 'intervention'
+
+export interface EvenementCalendrier {
+  id: string
+  type: CalendrierType
+  titre: string
+  debut: string
+  fin: string
+  statut: string
+  url: string
+}

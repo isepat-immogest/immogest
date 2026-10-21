@@ -20,6 +20,13 @@ const queryClient = new QueryClient({
   },
 })
 
+// Mode hors-ligne (coquille de l'application) : uniquement en production.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/app/sw.js', { scope: '/app/' }).catch(() => undefined)
+  })
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>

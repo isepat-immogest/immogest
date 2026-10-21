@@ -19,6 +19,8 @@ export interface FieldDef {
   step?: string
   hint?: string
   full?: boolean
+  /** Types de fichiers acceptés (champ « file »), ex. « .pdf,image/* ». */
+  accept?: string
 }
 
 type Values = Record<string, unknown>
@@ -142,7 +144,7 @@ export function FormDialog({
                       ))}
                     </Select>
                   ) : f.type === 'file' ? (
-                    <Input {...common} type="file" accept="image/*" {...register(f.name)} />
+                    <Input {...common} type="file" accept={f.accept ?? 'image/*'} {...register(f.name)} />
                   ) : (
                     <Input
                       {...common}

@@ -226,3 +226,99 @@ def interventions_du_locataire(locataire):
         filtre |= Q(bien_id=contrat.bien_id, date_signalement__gte=contrat.date_debut,
                     date_signalement__lte=fin)
     return Intervention.objects.filter(filtre).distinct().order_by('-date_signalement')
+
+
+# ── Rentabilité, score, calendrier, rappels ──────────────────────────────────
+
+def il_y_a_12_mois(d=None):
+    d = d or date.today()
+    return date(d.year - 1, d.month, 1)
+
+
+def rentabilite_bien(bien):
+    """Revenus encaissés, dépenses et rendement d'un bien sur les 12 derniers mois."""
+    from django.db.models import Sum  # type: ignore
+    debut = il_y_a_12_mois()
+    revenus = Paiement.objects.filter(contrat__bien=bien, mois__gte=debut).aggregate(
+        t=Sum('montant_paye'))['t'] or Decimal('0')
+    depenses_qs = bien.depenses.filter(date__gte=debut)
+    depenses = depenses_qs.aggregate(t=Sum('montant'))['t'] or Decimal('0')
+    net = revenus - depenses
+    rendement = None
+    if bien.prix_acquisition:
+        rendement = round(float(net) / float(bien.prix_acquisition) * 100, 2)
+    par_categorie = {c['categorie']: c['t'] for c in depenses_qs.values('categorie').annotate(t=Sum('montant'))}
+    return {'revenus_12m': revenus, 'depenses_12m': depenses, 'net_12m': net,
+            'rendement_net_pct': rendement, 'depenses_par_categorie': par_categorie}
+
+
+def score_locataire(locataire):
+    """Score de fiabilité (0-100) : ponctualité des paiements + taux d'effort (loyer / revenu)."""
+    paiements = list(Paiement.objects.filter(contrat__locataire=locataire).select_related('contrat'))
+    echus = [p for p in paiements if p.date_echeance <= date.today()]
+    if not echus:
+        return {'score': None, 'niveau': 'inconnu', 'nb_paiements': 0, 'nb_retards': 0, 'taux_effort': None}
+    retards = 0
+    for p in echus:
+        paye_en_retard = p.statut == 'paye' and p.date_paiement and p.date_paiement > p.date_echeance
+        if p.statut in ('retard', 'partiel') or paye_en_retard:
+            retards += 1
+    score = round(100 * (1 - retards / len(echus)))
+    taux_effort = None
+    contrat = locataire.contrat_actif
+    if locataire.revenu_mensuel and contrat:
+        taux_effort = round(float(contrat.loyer_total) / float(locataire.revenu_mensuel) * 100)
+        if taux_effort > 40:
+            score = max(score - 15, 0)
+    niveau = 'bon' if score >= 80 else 'moyen' if score >= 50 else 'risque'
+    return {'score': score, 'niveau': niveau, 'nb_paiements': len(echus), 'nb_retards': retards,
+            'taux_effort': taux_effort}
+
+
+def evenements_calendrier(proprietaires, debut, fin):
+    """Événements du calendrier entre deux dates : séjours, échéances de loyer, fins de contrat, interventions."""
+    evts = []
+    for r in Reservation.objects.filter(bien__proprietaire__in=proprietaires, date_arrivee__lte=fin).exclude(
+            statut='annulee').select_related('bien'):
+        sortie = r.date_depart or r.date_arrivee
+        if sortie >= debut:
+            evts.append({'id': f'res-{r.pk}', 'type': 'reservation', 'titre': f'{r.nom} — {r.bien.nom}',
+                         'debut': r.date_arrivee, 'fin': sortie, 'statut': r.statut, 'url': '/reservations'})
+    for p in Paiement.objects.filter(contrat__bien__proprietaire__in=proprietaires, mois__gte=debut.replace(day=1) - timedelta(days=31),
+                                     mois__lte=fin).exclude(statut='paye').select_related('contrat__locataire',
+                                                                                         'contrat__bien'):
+        if debut <= p.date_echeance <= fin:
+            evts.append({'id': f'loyer-{p.pk}', 'type': 'loyer', 'titre': f'Loyer {p.contrat.locataire}',
+                         'debut': p.date_echeance, 'fin': p.date_echeance, 'statut': p.statut, 'url': '/paiements'})
+    for c in Contrat.objects.filter(bien__proprietaire__in=proprietaires, statut='actif', date_fin__gte=debut,
+                                    date_fin__lte=fin).select_related('bien', 'locataire'):
+        evts.append({'id': f'fin-{c.pk}', 'type': 'contrat', 'titre': f'Fin de bail — {c.locataire}',
+                     'debut': c.date_fin, 'fin': c.date_fin, 'statut': c.statut, 'url': '/contrats'})
+    from .models import Intervention
+    for i in Intervention.objects.filter(bien__proprietaire__in=proprietaires, date_intervention__gte=debut,
+                                         date_intervention__lte=fin).exclude(statut='annulee').select_related('bien'):
+        evts.append({'id': f'int-{i.pk}', 'type': 'intervention', 'titre': f'{i.titre} — {i.bien.nom}',
+                     'debut': i.date_intervention, 'fin': i.date_intervention, 'statut': i.statut,
+                     'url': '/interventions'})
+    return sorted(evts, key=lambda e: e['debut'])
+
+
+def envoyer_rappels_echeance(jours=(3, 1)):
+    """Rappels d'échéance (J-3, J-1) aux locataires ayant un compte, et récapitulatif aux gestionnaires."""
+    aujourd_hui = date.today()
+    nb = 0
+    for delta in jours:
+        cible = aujourd_hui + timedelta(days=delta)
+        paiements = Paiement.objects.filter(
+            statut__in=['en_attente', 'partiel'], mois=cible.replace(day=1)).select_related(
+            'contrat__locataire__compte', 'contrat__bien')
+        for p in paiements:
+            if p.date_echeance != cible:
+                continue
+            compte = p.contrat.locataire.compte
+            if compte and compte.is_active:
+                notifier([compte], f'Loyer à payer dans {delta} jour(s)',
+                         f'{p.solde:.0f} FCFA pour {p.contrat.bien.nom}, échéance le {cible:%d/%m/%Y}.',
+                         lien='/espace/paiements', email=True)
+                nb += 1
+    return nb

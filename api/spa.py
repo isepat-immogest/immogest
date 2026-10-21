@@ -8,7 +8,15 @@ from django.views.static import serve  # type: ignore
 
 @never_cache
 def index(request, path=''):
-    fichier = settings.FRONTEND_DIST / 'index.html'
+    racine = settings.FRONTEND_DIST
+    # Fichiers à la racine du build (manifest, favicon, service worker) : servis tels quels.
+    if path and '/' not in path and path != 'index.html':
+        if (racine / path).is_file():
+            reponse = serve(request, path, document_root=racine)
+            if path == 'sw.js':
+                reponse['Service-Worker-Allowed'] = '/app/'
+            return reponse
+    fichier = racine / 'index.html'
     if not fichier.exists():
         return HttpResponse(
             "<h1>Application non compilée</h1><p>Exécutez <code>cd frontend &amp;&amp; npm install &amp;&amp; "

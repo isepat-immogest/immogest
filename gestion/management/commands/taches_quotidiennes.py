@@ -23,6 +23,7 @@ class Command(BaseCommand):
         crees = services.generer_loyers_du_mois()
         retards = services.actualiser_statuts_retard()
         expirees = services.expirer_reservations_impayees()
+        rappels = services.envoyer_rappels_echeance()
         self.stdout.write(f'{crees} loyer(s) généré(s), {retards} passé(s) en retard, '
-                          f'{expirees} réservation(s) expirée(s).')
+                          f'{expirees} réservation(s) expirée(s), {rappels} rappel(s) envoyé(s).')
         call_command('envoyer_alertes', dry_run=options['dry_run'])

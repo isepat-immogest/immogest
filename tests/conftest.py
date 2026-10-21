@@ -59,3 +59,9 @@ def client_locataire(compte_locataire):
     c = APIClient()
     c.force_authenticate(compte_locataire)
     return c
+
+
+@pytest.fixture(autouse=True)
+def hash_rapide(settings):
+    """Hachage MD5 en test : les créations de comptes passent de ~0,3 s à quelques ms."""
+    settings.PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']

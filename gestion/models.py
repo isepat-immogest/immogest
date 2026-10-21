@@ -148,6 +148,7 @@ class Contrat(models.Model):
     class Meta:
         verbose_name = 'Contrat de location'
         ordering = ['-date_debut']
+        indexes = [models.Index(fields=['statut', 'date_fin'], name='contrat_statut_fin_idx')]
 
     def __str__(self):
         return f'{self.bien} → {self.locataire}'
@@ -213,6 +214,7 @@ class Paiement(models.Model):
         verbose_name = 'Paiement'
         ordering = ['-mois']
         unique_together = ['contrat', 'mois']
+        indexes = [models.Index(fields=['statut', 'mois'], name='paiement_statut_mois_idx')]
 
     def __str__(self):
         return f'{self.contrat.locataire} — {mois_annee_fr(self.mois)}'
@@ -327,6 +329,7 @@ class Reservation(models.Model):
     class Meta:
         verbose_name = 'Réservation'
         ordering = ['-created_at']
+        indexes = [models.Index(fields=['statut', 'date_arrivee'], name='resa_statut_arrivee_idx')]
 
     def __str__(self):
         return f'{self.nom} — {self.bien} ({self.get_statut_display()})'
@@ -365,3 +368,75 @@ class Notification(models.Model):
 
     def __str__(self):
         return f'{self.titre} → {self.destinataire}'
+
+
+class Depense(models.Model):
+    """Dépense liée à un bien (taxe, assurance, travaux…) pour calculer la rentabilité nette."""
+    CATEGORIE_CHOICES = [
+        ('taxe', 'Taxes et impôts'),
+        ('assurance', 'Assurance'),
+        ('travaux', 'Travaux'),
+        ('entretien', 'Entretien'),
+        ('syndic', 'Syndic / charges'),
+        ('autre', 'Autre'),
+    ]
+
+    bien = models.ForeignKey(Bien, on_delete=models.CASCADE, related_name='depenses')
+    categorie = models.CharField(max_length=20, choices=CATEGORIE_CHOICES, default='autre')
+    libelle = models.CharField(max_length=200)
+    montant = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+    date = models.DateField(default=date.today)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Dépense'
+        ordering = ['-date', '-id']
+        indexes = [models.Index(fields=['date'], name='depense_date_idx')]
+
+    def __str__(self):
+        return f'{self.libelle} — {self.bien}'
+
+
+TAILLE_MAX_DOCUMENT = 5 * 1024 * 1024
+EXTENSIONS_DOCUMENT = ('pdf', 'jpg', 'jpeg', 'png')
+
+
+def valider_document(fichier):
+    ext = fichier.name.rsplit('.', 1)[-1].lower() if '.' in fichier.name else ''
+    if ext not in EXTENSIONS_DOCUMENT:
+        raise ValidationError('Format non autorisé (PDF, JPG ou PNG uniquement).')
+    if fichier.size > TAILLE_MAX_DOCUMENT:
+        raise ValidationError('Fichier trop volumineux (5 Mo maximum).')
+
+
+class Document(models.Model):
+    """Pièce jointe (pièce d'identité, bail signé, assurance…) rattachée à un locataire ou à un bien.
+    Le fichier n'est jamais exposé par une URL publique : il est servi par un endpoint authentifié."""
+    TYPE_CHOICES = [
+        ('identite', "Pièce d'identité"),
+        ('bail', 'Bail signé'),
+        ('assurance', 'Assurance'),
+        ('justificatif', 'Justificatif de revenu'),
+        ('etat_lieux', 'État des lieux'),
+        ('autre', 'Autre'),
+    ]
+
+    type_document = models.CharField(max_length=20, choices=TYPE_CHOICES, default='autre')
+    titre = models.CharField(max_length=150)
+    fichier = models.FileField(upload_to='documents/%Y/%m/', validators=[valider_document])
+    locataire = models.ForeignKey(Locataire, on_delete=models.CASCADE, null=True, blank=True,
+                                  related_name='documents')
+    bien = models.ForeignKey(Bien, on_delete=models.CASCADE, null=True, blank=True, related_name='documents')
+    date_expiration = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.titre
+
+    def clean(self):
+        if not self.locataire_id and not self.bien_id:
+            raise ValidationError('Un document doit être rattaché à un locataire ou à un bien.')

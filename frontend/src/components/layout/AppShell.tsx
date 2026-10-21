@@ -1,6 +1,7 @@
 import {
   Building2,
   CalendarCheck,
+  CalendarDays,
   FileText,
   Home,
   Inbox,
@@ -8,6 +9,7 @@ import {
   LogOut,
   Menu,
   Moon,
+  PiggyBank,
   Search,
   Sun,
   Users,
@@ -16,7 +18,8 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
 import { CommandPalette } from '@/components/layout/CommandPalette'
@@ -24,6 +27,7 @@ import { NotificationsBell } from '@/components/layout/NotificationsBell'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
+import { prefetchRoute, prefetchWhenIdle } from '@/lib/prefetch'
 import { cn } from '@/lib/utils'
 
 interface NavItem {
@@ -42,6 +46,8 @@ const GESTION_NAV: NavItem[] = [
   { to: '/paiements', label: 'Paiements', icon: Wallet, preload: () => import('@/pages/Paiements') },
   { to: '/interventions', label: 'Interventions', icon: Wrench, preload: () => import('@/pages/Interventions') },
   { to: '/reservations', label: 'Réservations', icon: CalendarCheck, preload: () => import('@/pages/Reservations') },
+  { to: '/calendrier', label: 'Calendrier', icon: CalendarDays, preload: () => import('@/pages/Calendrier') },
+  { to: '/depenses', label: 'Dépenses', icon: PiggyBank, preload: () => import('@/pages/Depenses') },
   { to: '/demandes', label: 'Demandes clients', icon: Inbox, preload: () => import('@/pages/Demandes') },
 ]
 
@@ -60,6 +66,18 @@ export function AppShell() {
   const [searchOpen, setSearchOpen] = useState(false)
   const isLocataire = user?.role === 'locataire'
   const nav = isLocataire ? LOCATAIRE_NAV : GESTION_NAV
+  const qc = useQueryClient()
+
+  // Pendant les temps morts, charge à l'avance le code et les données des pages principales.
+  useEffect(() => {
+    if (isLocataire) return
+    return prefetchWhenIdle(GESTION_NAV.flatMap((n) => [() => n.preload?.(), () => prefetchRoute(qc, n.to)]))
+  }, [isLocataire, qc])
+
+  const warm = (item: NavItem) => {
+    void item.preload?.()
+    prefetchRoute(qc, item.to)
+  }
 
   const links = (
     <nav className="flex flex-col gap-1 p-3" aria-label="Navigation principale">
@@ -68,8 +86,8 @@ export function AppShell() {
           key={item.to}
           to={item.to}
           end={item.end}
-          onMouseEnter={() => void item.preload?.()}
-          onFocus={() => void item.preload?.()}
+          onMouseEnter={() => warm(item)}
+          onFocus={() => warm(item)}
           onClick={() => setMenuOpen(false)}
           className={({ isActive }) =>
             cn(
