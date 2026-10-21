@@ -1,6 +1,7 @@
 """API publique (site vitrine et applications mobiles) : sans authentification, limitée en débit."""
 from django.core.exceptions import ValidationError as DjangoValidationError  # type: ignore
 from django.shortcuts import get_object_or_404  # type: ignore
+from django.urls import reverse  # type: ignore
 from drf_spectacular.utils import extend_schema  # type: ignore
 from rest_framework import generics, serializers, status  # type: ignore
 from rest_framework.permissions import AllowAny  # type: ignore
@@ -9,6 +10,7 @@ from rest_framework.throttling import ScopedRateThrottle  # type: ignore
 from rest_framework.views import APIView  # type: ignore
 
 from gestion import services
+from gestion.emails import envoyer_accuse_demande, envoyer_accuse_reservation
 from gestion.models import Bien, DemandeContact, Reservation
 
 from . import serializers as sz
@@ -70,6 +72,8 @@ class PublicReservationCreate(PublicMixin, APIView):
         DemandeContact.objects.create(
             bien=bien, nom=reservation.nom, email=reservation.email, telephone=reservation.telephone,
             message=f'Nouvelle réservation {reservation.reference} ({reservation.get_mode_paiement_display()}).')
+        envoyer_accuse_reservation(reservation, lien=request.build_absolute_uri(
+            reverse('reservation_confirmation', args=[reservation.token])))
         return Response(sz.PublicReservationSerializer(reservation).data, status=status.HTTP_201_CREATED)
 
 
@@ -91,6 +95,7 @@ class PublicContact(PublicMixin, APIView):
         valides = dict(data.validated_data)
         valides.pop('website', None)
         demande = DemandeContact.objects.create(**valides)
+        envoyer_accuse_demande(demande)
         services.notifier(services.gestionnaires_a_notifier(demande.bien), f'Nouveau message de {demande.nom}',
                           demande.message[:200], lien='/demandes', email=True)
         return Response({'detail': 'Message envoyé. Nous vous répondrons rapidement.'},

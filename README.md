@@ -8,7 +8,7 @@ Application de gestion locative pour le Sénégal (FCFA, Wave / Orange Money / F
 | Backend | Django 5.1, Django REST Framework, JWT (simplejwt), django-filter, drf-spectacular |
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui (Radix), TanStack Query, React Hook Form, Recharts, cmdk |
 | Données | PostgreSQL (prod) / SQLite (dev), PDF reportlab, export Excel openpyxl |
-| Qualité | pytest (43 tests, ~8 s), Vitest (11 tests), GitHub Actions, Docker |
+| Qualité | pytest (31 tests), Vitest (11 tests), GitHub Actions, Docker |
 
 ## Les trois surfaces
 
@@ -22,7 +22,7 @@ Application de gestion locative pour le Sénégal (FCFA, Wave / Orange Money / F
 ## Démarrage rapide (développement)
 
 ```bash
-python -m venv .venv && source .venv/bin/activate      # Windows : .venv\Scriptsctivate
+python -m venv .venv && source .venv/bin/activate      # Windows : .venv\Scriptsactivate
 pip install -r requirements-dev.txt
 cp .env.example .env
 python manage.py migrate
@@ -33,12 +33,30 @@ python manage.py runserver            # API + site public sur :8000
 cd frontend && npm install && npm run dev      # http://localhost:5173/app/
 ```
 
-Port 8000 déjà pris ? Lancer Django sur un autre port et le dire à Vite :
-`python manage.py runserver 8010` puis `cd frontend && DJANGO_URL=http://127.0.0.1:8010 npm run dev`
-(PowerShell : `$env:DJANGO_URL="http://127.0.0.1:8010"; npm run dev`).
-
 Pour servir l'application React directement par Django (comme en production) :
 `cd frontend && npm run build`, puis ouvrir `http://127.0.0.1:8000/app/`.
+
+## Emails de confirmation au client
+
+Quand un client envoie un message (formulaire de contact, fiche d'un bien, API publique) ou fait
+une réservation, il reçoit automatiquement un email de confirmation (`gestion/emails.py`). La
+réservation envoie le récapitulatif (référence, bien, dates, personnes, mode de paiement, montant)
+et un lien de suivi sécurisé. **L'email est obligatoire pour réserver** (site public et API).
+
+Tant que le SMTP n'est pas configuré, les emails s'affichent dans la console du serveur au lieu
+d'être envoyés. Exemple Gmail (« mot de passe d'application » : validation en deux étapes requise) :
+```
+EMAIL_USE_SMTP=True
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=votre.adresse@gmail.com
+EMAIL_HOST_PASSWORD=le_mot_de_passe_d_application
+DEFAULT_FROM_EMAIL=votre.adresse@gmail.com
+```
+Après modification de `.env`, redémarrez le serveur puis testez : `python manage.py tester_email votre.adresse@gmail.com`
+(la commande affiche l'erreur exacte en cas d'échec). Un échec d'envoi n'empêche jamais l'enregistrement
+de la demande : il est écrit dans les journaux du serveur.
 
 ## Ce que l'application fait automatiquement
 
@@ -49,18 +67,6 @@ Pour servir l'application React directement par Django (comme en production) :
   conversion en contrat saisonnier, page de suivi protégée par un jeton secret.
 - **Notifications** : cloche dans l'application + email à chaque réservation, message ou signalement locataire.
 - **Accès locataire** : lien d'activation à usage unique (plus de mot de passe envoyé en clair).
-- **Dépenses et rentabilité** : charges par bien (taxes, assurance, travaux…), résultat net et rendement sur 12 mois.
-- **Calendrier** : séjours, loyers à payer, fins de bail et interventions sur une seule vue mensuelle.
-- **Documents** : pièces jointes par locataire ou bien (PDF/JPG/PNG, 5 Mo), téléchargement authentifié uniquement.
-- **Score locataire** : fiabilité 0-100 (ponctualité des paiements + taux d'effort loyer/revenu).
-- **Rappels d'échéance** : notification et email aux locataires à J-3 et J-1.
-
-## Fluidité
-
-- Pages chargées à la demande **et préchargées** pendant les temps morts ; données préchargées au survol du menu.
-- Cache TanStack Query (affichage instantané des pages déjà vues), mises à jour optimistes (statuts, Kanban).
-- API sans N+1 (requêtes pré-chargées, vérifié par test), index SQL sur les filtres fréquents, **compression gzip** (-73 % sur les scripts).
-- Service worker : coquille de l'application disponible hors-ligne, scripts en cache ; les réponses de l'API ne sont jamais mises en cache.
 
 ## API
 

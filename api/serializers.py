@@ -1,8 +1,8 @@
 from django.core.exceptions import ValidationError as DjangoValidationError  # type: ignore
 from rest_framework import serializers  # type: ignore
 
-from gestion.models import (Bien, Contrat, DemandeContact, Depense, Document, Intervention, Locataire,
-                            Notification, Paiement, Reservation)
+from gestion.models import (Bien, Contrat, DemandeContact, Intervention, Locataire, Notification,
+                            Paiement, Reservation)
 from gestion.scope import proprietaires_visibles
 
 
@@ -44,10 +44,8 @@ class BienSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at']
 
     def get_locataire_actuel(self, obj):
-        # `_contrats_actifs` est pré-chargé par la vue (évite 2 requêtes par ligne)
-        actifs = getattr(obj, '_contrats_actifs', None)
-        contrat = actifs[0] if actifs else (obj.contrat_actif if actifs is None else None)
-        return {'id': contrat.locataire.pk, 'nom': str(contrat.locataire)} if contrat else None
+        loc = obj.locataire_actuel
+        return {'id': loc.pk, 'nom': str(loc)} if loc else None
 
 
 # ── Locataires ───────────────────────────────────────────────────────────────
@@ -71,8 +69,7 @@ class LocataireSerializer(serializers.ModelSerializer):
         return bool(obj.compte_id and obj.compte.is_active)
 
     def get_contrat_actif(self, obj):
-        actifs = getattr(obj, '_contrats_actifs', None)
-        c = actifs[0] if actifs else (obj.contrat_actif if actifs is None else None)
+        c = obj.contrat_actif
         return {'id': c.pk, 'bien': c.bien.nom, 'loyer_total': c.loyer_total} if c else None
 
 
@@ -205,61 +202,6 @@ class NotificationSerializer(serializers.ModelSerializer):
 
 # ── Public ───────────────────────────────────────────────────────────────────
 
-class DepenseSerializer(serializers.ModelSerializer):
-    bien_nom = serializers.CharField(source='bien.nom', read_only=True)
-    categorie_display = serializers.CharField(source='get_categorie_display', read_only=True)
-
-    class Meta:
-        model = Depense
-        fields = '__all__'
-        read_only_fields = ['created_at']
-
-    def validate_bien(self, bien):
-        _verifier_perimetre(self.context['request'], bien.proprietaire_id)
-        return bien
-
-
-class DocumentSerializer(serializers.ModelSerializer):
-    """Le fichier est en écriture seule : il se télécharge via /documents/{id}/telecharger/ (authentifié)."""
-    type_display = serializers.CharField(source='get_type_document_display', read_only=True)
-    nom_fichier = serializers.SerializerMethodField()
-    taille = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Document
-        fields = ['id', 'type_document', 'type_display', 'titre', 'fichier', 'locataire', 'bien',
-                  'date_expiration', 'created_at', 'nom_fichier', 'taille']
-        read_only_fields = ['created_at']
-        extra_kwargs = {'fichier': {'write_only': True}}
-
-    def get_nom_fichier(self, obj) -> str:
-        return obj.fichier.name.rsplit('/', 1)[-1]
-
-    def get_taille(self, obj) -> int:
-        try:
-            return obj.fichier.size
-        except (OSError, ValueError):
-            return 0
-
-    def validate_locataire(self, locataire):
-        if locataire is not None:
-            _verifier_perimetre(self.context['request'], locataire.proprietaire_id)
-        return locataire
-
-    def validate_bien(self, bien):
-        if bien is not None:
-            _verifier_perimetre(self.context['request'], bien.proprietaire_id)
-        return bien
-
-    def validate(self, attrs):
-        attrs = super().validate(attrs)
-        if not attrs.get('locataire') and not attrs.get('bien'):
-            raise serializers.ValidationError('Rattachez le document à un locataire ou à un bien.')
-        return attrs
-
-
-# ── Public ───────────────────────────────────────────────────────────────────
-
 class PublicBienSerializer(serializers.ModelSerializer):
     type_display = serializers.CharField(source='get_type_bien_display', read_only=True)
 
@@ -276,6 +218,8 @@ class PublicReservationCreateSerializer(serializers.ModelSerializer):
         model = Reservation
         fields = ['bien', 'nom', 'telephone', 'email', 'date_arrivee', 'date_depart', 'nb_personnes',
                   'mode_paiement', 'message', 'website']
+        # L'email est obligatoire : c'est là que le client reçoit sa confirmation.
+        extra_kwargs = {'email': {'required': True, 'allow_blank': False}}
 
     def validate_website(self, value):
         if value:
@@ -300,6 +244,7 @@ class PublicContactSerializer(serializers.ModelSerializer):
     class Meta:
         model = DemandeContact
         fields = ['bien', 'nom', 'email', 'telephone', 'message', 'website']
+        extra_kwargs = {'email': {'required': True, 'allow_blank': False}}
 
     def validate_website(self, value):
         if value:

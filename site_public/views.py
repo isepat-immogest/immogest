@@ -2,8 +2,10 @@ from django.shortcuts import render, get_object_or_404, redirect # type: ignore
 from django.contrib import messages # type: ignore
 from django.core.exceptions import ValidationError # type: ignore
 from django.db.models import Q # type: ignore
+from django.urls import reverse # type: ignore
 from gestion.models import Bien, Reservation, DemandeContact
-from gestion.forms import ContactPublicForm, ReservationForm
+from gestion.forms import ContactPublicForm, ReservationPublicForm
+from gestion.emails import envoyer_accuse_demande, envoyer_accuse_reservation
 from gestion import services
 
 
@@ -63,6 +65,7 @@ def bien_public_detail(request, pk):
             demande = form.save(commit=False)
             demande.bien = bien
             demande.save()
+            envoyer_accuse_demande(demande)
             messages.success(request, 'Votre demande a bien été envoyée. Nous vous recontacterons rapidement.')
             return redirect('bien_public_detail', pk=pk)
     else:
@@ -78,7 +81,8 @@ def contact(request):
     if request.method == 'POST':
         form = ContactPublicForm(request.POST)
         if form.is_valid():
-            form.save()
+            demande = form.save()
+            envoyer_accuse_demande(demande)
             messages.success(request, 'Votre message a bien été envoyé. Nous vous répondrons dans les meilleurs délais.')
             return redirect('contact')
     else:
@@ -126,7 +130,7 @@ def reservation_create(request, pk):
     bien = get_object_or_404(Bien, pk=pk, statut='libre')
 
     if request.method == 'POST':
-        form = ReservationForm(request.POST, initial={'bien': bien.pk})
+        form = ReservationPublicForm(request.POST, initial={'bien': bien.pk})
         if form.is_valid():
             donnees = {k: v for k, v in form.cleaned_data.items() if k != 'bien'}
             try:
@@ -137,9 +141,11 @@ def reservation_create(request, pk):
                         form.add_error(champ if champ in form.fields else None, erreur)
             else:
                 _creer_demande_depuis_reservation(reservation)
+                envoyer_accuse_reservation(reservation, lien=request.build_absolute_uri(
+                    reverse('reservation_confirmation', args=[reservation.token])))
                 return redirect('reservation_confirmation', token=reservation.token)
     else:
-        form = ReservationForm(initial={'bien': bien.pk})
+        form = ReservationPublicForm(initial={'bien': bien.pk})
 
     return render(request, 'site_public/reservation_form.html', {
         'bien': bien, 'form': form, 'dates_occupees': services.dates_occupees(bien)})

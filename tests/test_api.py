@@ -138,7 +138,7 @@ def test_public_catalogue_et_reservation(bien):
     assert c.get(f'{API}/public/biens/?ville=dakar').data['count'] == 1
     arrivee = date.today() + timedelta(days=5)
     payload = {'bien': bien.pk, 'nom': 'Client Test', 'telephone': '+221771234567',
-               'date_arrivee': str(arrivee), 'date_depart': str(arrivee + timedelta(days=2)),
+               'email': 'client@example.com', 'date_arrivee': str(arrivee), 'date_depart': str(arrivee + timedelta(days=2)),
                'nb_personnes': 2, 'mode_paiement': 'orange_money'}
     r = c.post(f'{API}/public/reservations/', payload, format='json')
     assert r.status_code == 201 and r.data['montant_total'] == '40000.00'

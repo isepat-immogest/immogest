@@ -55,7 +55,6 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.gzip.GZipMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -129,6 +128,10 @@ STORAGES = {
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Django sert lui-même les photos téléversées (désactivé automatiquement avec S3).
+# Sans cela, les photos ne s'affichent plus dès que DEBUG=False.
+SERVE_MEDIA = env_bool('SERVE_MEDIA', not env_bool('USE_S3', False))
+
 # ── Stockage des médias en production (photos de biens/locataires) ────────
 # Sur la plupart des hébergeurs, le disque n'est PAS persistant : les photos
 # uploadées seraient perdues à chaque redéploiement. Solution : un stockage
@@ -168,6 +171,7 @@ if env_bool('EMAIL_USE_SMTP', False):
     EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
     EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
     EMAIL_USE_TLS = env_bool('EMAIL_USE_TLS', True)
+    EMAIL_TIMEOUT = 10   # secondes : un SMTP lent ne doit pas bloquer la page du client
     EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
     EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
     DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)

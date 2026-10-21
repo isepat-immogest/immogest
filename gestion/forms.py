@@ -85,6 +85,11 @@ class ContactPublicForm(forms.ModelForm):
             'message': forms.Textarea(attrs={'rows': 4, 'placeholder': 'Votre message…'}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Obligatoire : c'est à cette adresse que le client reçoit sa confirmation et notre réponse.
+        self.fields['email'].required = True
+
 
 class ReservationForm(forms.ModelForm):
     """Formulaire de commande/réservation d'une chambre, avec choix Wave / Orange Money / Free Money."""
@@ -102,3 +107,13 @@ class ReservationForm(forms.ModelForm):
             'mode_paiement': forms.RadioSelect,
             'message': forms.Textarea(attrs={'rows': 3, 'placeholder': 'Précisions sur votre séjour (optionnel)'}),
         }
+
+
+class ReservationPublicForm(ReservationForm):
+    """Formulaire de réservation du site public : l'email est OBLIGATOIRE, car c'est à cette
+    adresse que le client reçoit sa confirmation. (ReservationForm garde l'email facultatif
+    pour la saisie manuelle d'un client sans email.)"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['email'].required = True
+        self.fields['email'].widget.attrs['placeholder'] = 'Votre email (vous y recevrez la confirmation)'

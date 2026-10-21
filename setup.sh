@@ -12,7 +12,7 @@ python3 -m venv venv
 source venv/bin/activate
 
 # Installer les dépendances
-pip install django pillow
+pip install -r requirements-dev.txt
 
 # Migrations
 python manage.py makemigrations gestion
