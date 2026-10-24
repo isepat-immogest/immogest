@@ -1,16 +1,14 @@
 from django import forms # type: ignore
 from django.shortcuts import render, get_object_or_404, redirect # type: ignore
 from django.contrib.auth.decorators import login_required # type: ignore
-from django.contrib.auth import login, logout, authenticate # type: ignore
+from django.contrib.auth import login, logout # type: ignore
 from django.contrib.auth.forms import AuthenticationForm # type: ignore
 from django.contrib.auth.models import User # type: ignore
 from django.core.mail import send_mail # type: ignore
 from django.utils.crypto import get_random_string # type: ignore
 from functools import wraps # type: ignore
 from django.contrib import messages # type: ignore
-from django.db.models import Sum, Count, Q, Case, When, IntegerField # type: ignore
-from django.db.models.functions import TruncMonth # type: ignore
-from django.utils import timezone # type: ignore
+from django.db.models import Sum, Q, Case, When, IntegerField # type: ignore
 from django.http import HttpResponse # type: ignore
 from django.views.decorators.http import require_POST # type: ignore
 import csv

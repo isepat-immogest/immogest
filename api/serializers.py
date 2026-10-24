@@ -1,8 +1,9 @@
 from django.core.exceptions import ValidationError as DjangoValidationError  # type: ignore
+from drf_spectacular.utils import extend_schema_field  # type: ignore
 from rest_framework import serializers  # type: ignore
 
-from gestion.models import (Bien, Contrat, DemandeContact, Intervention, Locataire, Notification,
-                            Paiement, Reservation)
+from gestion.models import (Bien, Contrat, DemandeContact, Depense, Document, Intervention, Locataire,
+                            Notification, Paiement, Reservation)
 from gestion.scope import proprietaires_visibles
 
 
@@ -43,6 +44,7 @@ class BienSerializer(serializers.ModelSerializer):
         exclude = ['proprietaire']
         read_only_fields = ['created_at']
 
+    @extend_schema_field(dict)
     def get_locataire_actuel(self, obj):
         loc = obj.locataire_actuel
         return {'id': loc.pk, 'nom': str(loc)} if loc else None
@@ -57,17 +59,22 @@ class LocataireSerializer(serializers.ModelSerializer):
     acces_actif = serializers.SerializerMethodField()
     contrat_actif = serializers.SerializerMethodField()
 
+    
+
     class Meta:
         model = Locataire
         exclude = ['proprietaire', 'compte']
         read_only_fields = ['created_at']
 
+    @extend_schema_field(bool)
     def get_a_un_acces(self, obj):
         return obj.compte_id is not None
 
+    @extend_schema_field(bool)
     def get_acces_actif(self, obj):
         return bool(obj.compte_id and obj.compte.is_active)
 
+    @extend_schema_field(dict)
     def get_contrat_actif(self, obj):
         c = obj.contrat_actif
         return {'id': c.pk, 'bien': c.bien.nom, 'loyer_total': c.loyer_total} if c else None
@@ -132,6 +139,55 @@ class VersementSerializer(serializers.Serializer):
     date_versement = serializers.DateField(required=False)
 
 
+class DepenseSerializer(serializers.ModelSerializer):
+    bien_nom = serializers.CharField(source='bien.nom', read_only=True)
+    categorie_display = serializers.CharField(source='get_categorie_display', read_only=True)
+
+    class Meta:
+        model = Depense
+        fields = '__all__'
+        read_only_fields = ['created_at']
+
+    def validate_bien(self, bien):
+        _verifier_perimetre(self.context['request'], bien.proprietaire_id)
+        return bien
+
+
+class DocumentSerializer(CleanedModelSerializer):
+    """Le fichier est en écriture seule : il n'est jamais exposé par URL, mais via `/telecharger/`."""
+    type_display = serializers.CharField(source='get_type_document_display', read_only=True)
+    nom_fichier = serializers.SerializerMethodField()
+    taille = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Document
+        fields = ['id', 'type_document', 'type_display', 'titre', 'fichier', 'nom_fichier', 'taille',
+                  'locataire', 'bien', 'date_expiration', 'created_at']
+        read_only_fields = ['created_at']
+        extra_kwargs = {'fichier': {'write_only': True}}
+
+    @extend_schema_field(str)
+    def get_nom_fichier(self, obj):
+        return obj.fichier.name.rsplit('/', 1)[-1] if obj.fichier else ''
+
+    @extend_schema_field(int)
+    def get_taille(self, obj):
+        try:
+            return obj.fichier.size
+        except (OSError, ValueError):
+            return None
+
+    def validate_locataire(self, locataire):
+        if locataire is not None:
+            _verifier_perimetre(self.context['request'], locataire.proprietaire_id)
+        return locataire
+
+    def validate_bien(self, bien):
+        if bien is not None:
+            _verifier_perimetre(self.context['request'], bien.proprietaire_id)
+        return bien
+
+
 class GenererMoisSerializer(serializers.Serializer):
     mois = serializers.DateField(required=False, help_text="Un jour du mois visé (défaut : mois courant)")
 
@@ -149,6 +205,7 @@ class InterventionSerializer(serializers.ModelSerializer):
         exclude = ['signale_par']
         read_only_fields = ['created_at']
 
+    @extend_schema_field(str)
     def get_signale_par_nom(self, obj):
         return obj.signale_par.get_full_name() or obj.signale_par.username if obj.signale_par else None
 

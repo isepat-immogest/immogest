@@ -5,7 +5,7 @@ import pytest
 from django.core.exceptions import ValidationError
 
 from gestion import services
-from gestion.models import Bien, Contrat, Paiement, Reservation
+from gestion.models import Contrat, Paiement, Reservation
 
 pytestmark = pytest.mark.django_db
 

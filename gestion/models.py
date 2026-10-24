@@ -67,6 +67,9 @@ class Bien(models.Model):
 
     @property
     def contrat_actif(self):
+        prefetch = getattr(self, '_contrats_actifs', None)  # rempli par les viewsets (évite le N+1)
+        if prefetch is not None:
+            return prefetch[0] if prefetch else None
         return self.contrats.filter(statut='actif').first()
 
     def synchroniser_statut(self):
@@ -114,6 +117,9 @@ class Locataire(models.Model):
 
     @property
     def contrat_actif(self):
+        prefetch = getattr(self, '_contrats_actifs', None)  # rempli par les viewsets (évite le N+1)
+        if prefetch is not None:
+            return prefetch[0] if prefetch else None
         return self.contrats.filter(statut='actif').first()
 
 
