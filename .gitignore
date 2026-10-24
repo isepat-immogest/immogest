@@ -24,3 +24,5 @@ frontend/dist/
 .pytest_cache/
 .venv/
 *.log
+
+immogest-github/
