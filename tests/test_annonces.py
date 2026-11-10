@@ -1,4 +1,4 @@
-"""Annonces publiques : biens à vendre (terrains, villas…) à côté des locations."""
+﻿"""Annonces publiques : biens à vendre (terrains, villas…) à côté des locations."""
 from decimal import Decimal
 
 import pytest
@@ -46,15 +46,15 @@ def test_les_biens_existants_restent_des_locations(bien):
 
 def test_api_publique_de_reservation_ignore_les_ventes(gestionnaire, bien):
     vente = _vente(gestionnaire)
-    reponse = APIClient().get('/api/public/biens/')
+    reponse = APIClient().get('/api/v1/public/biens/')
     assert reponse.status_code == 200
     ids = [b['id'] for b in (reponse.json().get('results', reponse.json()))]
     assert bien.id in ids and vente.id not in ids
-    assert APIClient().get(f'/api/public/biens/{vente.id}/').status_code == 404
+    assert APIClient().get(f'/api/v1/public/biens/{vente.id}/').status_code == 404
 
 
 def test_creation_d_une_vente_par_l_api_de_gestion(client_gestion):
-    reponse = client_gestion.post('/api/biens/', {
+    reponse = client_gestion.post('/api/v1/biens/', {
         'nom': 'Parcelle 150 m²', 'type_bien': 'terrain', 'offre': 'vente', 'ville': 'Diamniadio',
         'adresse': 'Zone Sébi Ponti', 'code_postal': '00000', 'surface': '150',
         'prix_vente': '11000000', 'statut_juridique': 'titre_foncier'}, format='json')
@@ -63,7 +63,7 @@ def test_creation_d_une_vente_par_l_api_de_gestion(client_gestion):
 
 
 def test_creation_d_une_vente_sans_prix_refusee(client_gestion):
-    reponse = client_gestion.post('/api/biens/', {
+    reponse = client_gestion.post('/api/v1/biens/', {
         'nom': 'Parcelle', 'type_bien': 'terrain', 'offre': 'vente', 'ville': 'Diamniadio',
         'adresse': 'Zone', 'code_postal': '00000', 'surface': '150'}, format='json')
     assert reponse.status_code == 400
