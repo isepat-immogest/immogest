@@ -1,0 +1,38 @@
+{% extends 'gestion/base.html' %}
+{% block title %}État des loyers — ImmoGest{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <h1>État des loyers — {{ mois|date:"F Y" }}</h1>
+  <a href="{% url 'paiements_list' %}" class="btn">Suivi des paiements</a>
+</div>
+
+<div class="content">
+  <div class="stats-grid" style="grid-template-columns:1fr 1fr;margin-bottom:20px">
+    <div class="stat-card"><div class="stat-label">✅ En règle</div><div class="stat-value" style="color:var(--green)">{{ en_regle|length }}</div></div>
+    <div class="stat-card"><div class="stat-label">⚠ À régulariser</div><div class="stat-value" style="color:var(--red)">{{ en_retard|length }}</div></div>
+  </div>
+
+  {% for titre, lignes in groupes %}
+  <div class="card" style="margin-bottom:20px">
+    <h3 style="font-size:14px;font-weight:600;padding:16px 20px 0">{{ titre }}</h3>
+    <table>
+      <thead><tr><th>Bien</th><th>Locataire</th><th>Dû</th><th>Payé</th><th>Reste</th></tr></thead>
+      <tbody>
+      {% for contrat, paiement in lignes %}
+        <tr>
+          <td><a href="{% url 'bien_detail' contrat.bien.pk %}" style="color:var(--blue);text-decoration:none">{{ contrat.bien.nom }}</a></td>
+          <td>{{ contrat.locataire }}</td>
+          <td>{% if paiement %}{{ paiement.montant_du|floatformat:0 }}{% else %}{{ contrat.loyer_total|floatformat:0 }}{% endif %} F CFA</td>
+          <td>{% if paiement %}{{ paiement.montant_paye|floatformat:0 }}{% else %}0{% endif %} F CFA</td>
+          <td>{% if paiement %}{{ paiement.solde|floatformat:0 }}{% else %}{{ contrat.loyer_total|floatformat:0 }}{% endif %} F CFA</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" style="color:var(--text-faint);text-align:center;padding:24px">Aucun contrat.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

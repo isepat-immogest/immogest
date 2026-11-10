@@ -1,7 +1,8 @@
 from django.shortcuts import render, get_object_or_404, redirect # type: ignore
 from django.contrib import messages # type: ignore
 from django.core.exceptions import ValidationError # type: ignore
-from django.db.models import Q # type: ignore
+from decimal import Decimal, InvalidOperation
+from django.db.models import Case, Count, DecimalField, F, Q, When # type: ignore
 from django.urls import reverse # type: ignore
 from gestion.models import Bien, Reservation, DemandeContact
 from gestion.forms import ContactPublicForm, ReservationPublicForm
@@ -11,10 +12,10 @@ from gestion import services
 
 def index(request):
     """Page d'accueil du site public."""
-    biens_disponibles = Bien.objects.filter(statut='libre').order_by('-created_at')
+    biens_disponibles = Bien.objects.filter(statut='libre', offre='location').order_by('-created_at')
     featured = biens_disponibles[:6]
     nb_biens_disponibles = biens_disponibles.count()
-    villes = (Bien.objects.filter(statut='libre')
+    villes = (Bien.objects.filter(statut='libre', offre='location')
               .exclude(ville='').values_list('ville', flat=True).distinct().order_by('ville')[:12])
     return render(request, 'site_public/index.html', {
         'featured': featured,
@@ -23,41 +24,72 @@ def index(request):
     })
 
 
+TRIS_ANNONCES = {
+    'recent': ('-created_at', 'Plus récentes'),
+    'prix_asc': ('prix_tri', 'Prix croissant'),
+    'prix_desc': ('-prix_tri', 'Prix décroissant'),
+    'surface_desc': ('-surface', 'Surface décroissante'),
+}
+
+
 def biens_public_list(request):
-    """Catalogue public des biens disponibles à la location."""
-    qs = Bien.objects.filter(statut='libre')
-    q = request.GET.get('q', '')
+    """Annonces publiques façon portail immobilier : location et vente, filtres et tris."""
+    base = Bien.annonces_publiques()
+    qs = base.annotate(prix_tri=_prix_expr())
+    offre = request.GET.get('offre', '')
+    q = request.GET.get('q', '').strip()
     ville = request.GET.get('ville', '')
     type_bien = request.GET.get('type', '')
     prix_max = request.GET.get('prix_max', '')
+    tri = request.GET.get('tri', 'recent')
+    if tri not in TRIS_ANNONCES:
+        tri = 'recent'
 
+    if offre in ('location', 'vente'):
+        qs = qs.filter(offre=offre)
+    else:
+        offre = ''
     if q:
-        qs = qs.filter(Q(nom__icontains=q) | Q(adresse__icontains=q) | Q(ville__icontains=q))
+        qs = qs.filter(Q(nom__icontains=q) | Q(adresse__icontains=q) | Q(ville__icontains=q)
+                       | Q(description__icontains=q))
     if ville:
         qs = qs.filter(ville__iexact=ville)
     if type_bien:
         qs = qs.filter(type_bien=type_bien)
     if prix_max:
         try:
-            qs = qs.filter(loyer_charges__lte=float(prix_max))
-        except ValueError:
-            pass
+            plafond = Decimal(prix_max)
+        except InvalidOperation:
+            plafond = None
+        if plafond is not None:
+            qs = qs.filter(prix_tri__lte=plafond)
 
-    villes = (Bien.objects.filter(statut='libre')
-              .exclude(ville='').values_list('ville', flat=True).distinct().order_by('ville'))
+    qs = qs.order_by(TRIS_ANNONCES[tri][0], '-created_at')
 
-    return render(request, 'site_public/biens_list.html', {
-        'biens': qs.order_by('-created_at'),
+    villes = (base.exclude(ville='').values('ville').annotate(n=Count('id')).order_by('ville'))
+    return render(request, 'site_public/annonces_list.html', {
+        'biens': qs.prefetch_related('photos'),
         'villes': villes,
-        'q': q, 'ville': ville, 'type_bien': type_bien, 'prix_max': prix_max,
+        'nb_total': base.count(),
+        'nb_location': base.filter(offre='location').count(),
+        'nb_vente': base.filter(offre='vente').count(),
+        'offre': offre, 'q': q, 'ville': ville, 'type_bien': type_bien, 'prix_max': prix_max, 'tri': tri,
+        'tris': [(cle, libelle) for cle, (_, libelle) in TRIS_ANNONCES.items()],
         'type_choices': Bien.TYPE_CHOICES,
     })
 
 
+def _prix_expr():
+    """Prix comparable : prix de vente pour une vente, loyer pour une location."""
+    return Case(When(offre='vente', then=F('prix_vente')), default=F('loyer_charges'),
+                output_field=DecimalField(max_digits=14, decimal_places=2))
+
+
 def bien_public_detail(request, pk):
     """Fiche détaillée publique d'un bien, avec formulaire de contact."""
-    bien = get_object_or_404(Bien, pk=pk, statut='libre')
-    autres_biens = Bien.objects.filter(statut='libre', ville=bien.ville).exclude(pk=pk)[:3]
+    bien = get_object_or_404(Bien.annonces_publiques().prefetch_related('equipements', 'photos'), pk=pk)
+    autres_biens = (Bien.annonces_publiques().filter(ville=bien.ville, offre=bien.offre)
+                    .exclude(pk=pk).prefetch_related('photos')[:3])
 
     if request.method == 'POST':
         form = ContactPublicForm(request.POST, initial={'bien': bien.pk})
@@ -66,6 +98,7 @@ def bien_public_detail(request, pk):
             demande.bien = bien
             demande.save()
             envoyer_accuse_demande(demande)
+            services.notifier_nouvelle_demande(demande)
             messages.success(request, 'Votre demande a bien été envoyée. Nous vous recontacterons rapidement.')
             return redirect('bien_public_detail', pk=pk)
     else:
@@ -83,6 +116,7 @@ def contact(request):
         if form.is_valid():
             demande = form.save()
             envoyer_accuse_demande(demande)
+            services.notifier_nouvelle_demande(demande)
             messages.success(request, 'Votre message a bien été envoyé. Nous vous répondrons dans les meilleurs délais.')
             return redirect('contact')
     else:
@@ -94,14 +128,14 @@ def contact(request):
 
 def reservation_rooms_list(request):
     """Page 'Réserver' : liste des chambres/biens disponibles à commander."""
-    qs = Bien.objects.filter(statut='libre')
+    qs = Bien.objects.filter(statut='libre', offre='location')
     q = request.GET.get('q', '')
     ville = request.GET.get('ville', '')
     if q:
         qs = qs.filter(Q(nom__icontains=q) | Q(ville__icontains=q))
     if ville:
         qs = qs.filter(ville__iexact=ville)
-    villes = (Bien.objects.filter(statut='libre')
+    villes = (Bien.objects.filter(statut='libre', offre='location')
               .exclude(ville='').values_list('ville', flat=True).distinct().order_by('ville'))
     return render(request, 'site_public/reservation_rooms.html', {
         'biens': qs.order_by('-created_at'), 'villes': villes, 'q': q, 'ville': ville,
@@ -127,7 +161,7 @@ def _creer_demande_depuis_reservation(reservation):
 
 def reservation_create(request, pk):
     """Formulaire de commande/réservation pour une chambre précise (avec contrôle de disponibilité)."""
-    bien = get_object_or_404(Bien, pk=pk, statut='libre')
+    bien = get_object_or_404(Bien, pk=pk, statut='libre', offre='location')
 
     if request.method == 'POST':
         form = ReservationPublicForm(request.POST, initial={'bien': bien.pk})

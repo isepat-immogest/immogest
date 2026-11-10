@@ -5,36 +5,23 @@ import { toast } from 'sonner'
 
 import { PageHeader, StatusBadge } from '@/components/common'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { FormDialog, type FieldDef } from '@/components/FormDialog'
+import { FormDialog } from '@/components/FormDialog'
 import { ListShell } from '@/components/ListShell'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input, Select } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useDebounce } from '@/hooks/useDebounce'
-import { STATUT_BIEN, STATUTS_BIEN, TYPES_BIEN } from '@/lib/labels'
+import { bienDefaults, useBienFields } from '@/lib/catalogues'
+import { STATUT_BIEN, STATUTS_BIEN } from '@/lib/labels'
 import { notifyError, useDelete, useList, useSave } from '@/lib/queries'
 import type { Bien } from '@/lib/types'
 import { formatFCFA } from '@/lib/utils'
 
-export const BIEN_FIELDS: FieldDef[] = [
-  { name: 'nom', label: 'Nom du bien', required: true, full: true },
-  { name: 'type_bien', label: 'Type', type: 'select', options: TYPES_BIEN, required: true },
-  { name: 'statut', label: 'Statut', type: 'select', options: STATUTS_BIEN, required: true },
-  { name: 'adresse', label: 'Adresse', required: true, full: true },
-  { name: 'ville', label: 'Ville', required: true },
-  { name: 'code_postal', label: 'Code postal', required: true },
-  { name: 'surface', label: 'Surface (m²)', type: 'number', required: true },
-  { name: 'nb_pieces', label: 'Nombre de pièces', type: 'number', required: true },
-  { name: 'etage', label: 'Étage', type: 'number', nullable: true },
-  { name: 'loyer_charges', label: 'Loyer charges comprises (FCFA)', type: 'number', required: true },
-  { name: 'prix_nuit', label: 'Tarif par nuit (FCFA)', type: 'number', nullable: true, hint: 'Pour les réservations du site public.' },
-  { name: 'depot_garantie', label: 'Dépôt de garantie (FCFA)', type: 'number' },
-  { name: 'photo', label: 'Photo', type: 'file', full: true },
-  { name: 'description', label: 'Description', type: 'textarea' },
-]
-
-export const BIEN_DEFAULTS = { type_bien: 'appartement', statut: 'libre', nb_pieces: 1, depot_garantie: 0 }
+export const BIEN_DEFAULTS = {
+  type_bien: 'appartement', offre: 'location', loyer_charges: 0, statut: 'libre', nb_pieces: 1, depot_garantie: 0, nb_chambres: 0, nb_salles_bain: 1,
+  meuble: false, equipements: [] as string[],
+}
 
 export default function Biens() {
   const [page, setPage] = useState(1)
@@ -46,6 +33,7 @@ export default function Biens() {
   const remove = useDelete('/biens')
   const [editing, setEditing] = useState<Bien | 'new' | null>(null)
   const [deleting, setDeleting] = useState<Bien | null>(null)
+  const fields = useBienFields(editing)
 
   return (
     <>
@@ -58,7 +46,7 @@ export default function Biens() {
         query={query}
         page={page}
         onPage={setPage}
-        cols={6}
+        cols={7}
         emptyTitle="Aucun bien"
         emptyDescription="Ajoutez votre premier bien pour commencer."
         emptyAction={<Button onClick={() => setEditing('new')}><Plus /> Ajouter un bien</Button>}
@@ -80,7 +68,7 @@ export default function Biens() {
             <TableHeader>
               <TableRow>
                 <TableHead>Bien</TableHead><TableHead>Ville</TableHead><TableHead>Type</TableHead>
-                <TableHead>Loyer</TableHead><TableHead>Statut</TableHead><TableHead>Locataire</TableHead><TableHead className="w-10" />
+                <TableHead>Loyer</TableHead><TableHead>Statut</TableHead><TableHead>Propriétaire(s)</TableHead><TableHead>Locataire</TableHead><TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -94,8 +82,9 @@ export default function Biens() {
                   </TableCell>
                   <TableCell>{b.ville}</TableCell>
                   <TableCell>{b.type_display}</TableCell>
-                  <TableCell className="tabular-nums">{formatFCFA(b.loyer_charges)}</TableCell>
+                  <TableCell className="tabular-nums">{b.offre === 'vente' ? formatFCFA(b.prix_vente ?? 0) : formatFCFA(b.loyer_charges)}</TableCell>
                   <TableCell><StatusBadge map={STATUT_BIEN} value={b.statut} /></TableCell>
+                  <TableCell className="text-sm">{b.proprietaires_detail.length ? b.proprietaires_detail.map((p) => p.nom).join(', ') : <span className="text-warning">À renseigner</span>}</TableCell>
                   <TableCell>{b.locataire_actuel ? <Link className="hover:underline" to={`/locataires/${b.locataire_actuel.id}`}>{b.locataire_actuel.nom}</Link> : <span className="text-muted-foreground">—</span>}</TableCell>
                   <TableCell>
                     <DropdownMenu>
@@ -117,8 +106,8 @@ export default function Biens() {
         open={editing !== null}
         onOpenChange={(o) => !o && setEditing(null)}
         title={editing === 'new' ? 'Ajouter un bien' : 'Modifier le bien'}
-        fields={BIEN_FIELDS}
-        defaultValues={editing && editing !== 'new' ? { ...editing, photo: undefined } : BIEN_DEFAULTS}
+        fields={fields}
+        defaultValues={editing && editing !== 'new' ? bienDefaults(editing) : BIEN_DEFAULTS}
         onSubmit={async (payload) => {
           await save.mutateAsync({ id: editing && editing !== 'new' ? editing.id : undefined, data: payload })
           toast.success(editing === 'new' ? 'Bien ajouté.' : 'Bien modifié.')
@@ -128,7 +117,7 @@ export default function Biens() {
         open={deleting !== null}
         onOpenChange={(o) => !o && setDeleting(null)}
         title="Supprimer ce bien ?"
-        description={`« ${deleting?.nom ?? ''} » et ses contrats, paiements et interventions seront définitivement supprimés.`}
+        description={`« ${deleting?.nom ?? ''} », ses anciens contrats, paiements et interventions seront définitivement supprimés. Impossible si un contrat est actif.`}
         confirmLabel="Supprimer"
         destructive
         loading={remove.isPending}

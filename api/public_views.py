@@ -25,11 +25,14 @@ class PublicBienList(PublicMixin, generics.ListAPIView):
     serializer_class = sz.PublicBienSerializer
     search_fields = ['nom', 'adresse', 'ville']
     ordering_fields = ['loyer_charges', 'created_at', 'surface']
-    filterset_fields = ['type_bien', 'nb_pieces']
+    filterset_fields = ['type_bien', 'nb_pieces', 'meuble']
 
     def get_queryset(self):
-        qs = Bien.objects.filter(statut='libre').order_by('-created_at')
+        qs = Bien.objects.filter(statut='libre', offre='location').prefetch_related('equipements').order_by('-created_at')
         p = self.request.query_params
+        for eq in p.getlist('equipements'):           # ?equipements=3&equipements=7 : il faut TOUS les équipements
+            if eq.isdigit():
+                qs = qs.filter(equipements=int(eq))
         if p.get('ville'):
             qs = qs.filter(ville__iexact=p['ville'])
         try:
@@ -44,13 +47,13 @@ class PublicBienList(PublicMixin, generics.ListAPIView):
 
 class PublicBienDetail(PublicMixin, generics.RetrieveAPIView):
     serializer_class = sz.PublicBienSerializer
-    queryset = Bien.objects.filter(statut='libre')
+    queryset = Bien.objects.filter(statut='libre', offre='location').prefetch_related('equipements')
 
 
 class PublicDisponibilites(PublicMixin, APIView):
     @extend_schema(responses={200: dict})
     def get(self, request, pk):
-        bien = get_object_or_404(Bien, pk=pk, statut='libre')
+        bien = get_object_or_404(Bien, pk=pk, statut='libre', offre='location')
         return Response({'occupees': services.dates_occupees(bien)})
 
 
@@ -96,7 +99,6 @@ class PublicContact(PublicMixin, APIView):
         valides.pop('website', None)
         demande = DemandeContact.objects.create(**valides)
         envoyer_accuse_demande(demande)
-        services.notifier(services.gestionnaires_a_notifier(demande.bien), f'Nouveau message de {demande.nom}',
-                          demande.message[:200], lien='/demandes', email=True)
+        services.notifier_nouvelle_demande(demande)
         return Response({'detail': 'Message envoyé. Nous vous répondrons rapidement.'},
                         status=status.HTTP_201_CREATED)

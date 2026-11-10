@@ -1,9 +1,13 @@
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError as DjangoValidationError  # type: ignore
 from drf_spectacular.utils import extend_schema_field  # type: ignore
 from rest_framework import serializers  # type: ignore
 
-from gestion.models import (Bien, Contrat, DemandeContact, Depense, Document, Intervention, Locataire,
-                            Notification, Paiement, Reservation)
+from gestion import notifications
+from gestion.models import (Bien, BienProprietaire, Contrat, DemandeContact, Depense, Document, EnvoiNotification,
+                            Equipement, Intervention, Locataire, Notification, Paiement, ProfilGestionnaire,
+                            Proprietaire, Reservation)
 from gestion.scope import proprietaires_visibles
 
 
@@ -13,12 +17,14 @@ class CleanedModelSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         attrs = super().validate(attrs)
         modele = self.Meta.model
+        champs = {f.name for f in modele._meta.fields}   # exclut les relations plusieurs-à-plusieurs (équipements…)
         if self.instance is not None:
             instance = modele.objects.get(pk=self.instance.pk)
             for k, v in attrs.items():
-                setattr(instance, k, v)
+                if k in champs:
+                    setattr(instance, k, v)
         else:
-            instance = modele(**{k: v for k, v in attrs.items() if k in {f.name for f in modele._meta.fields}})
+            instance = modele(**{k: v for k, v in attrs.items() if k in champs})
         try:
             instance.clean()
         except DjangoValidationError as exc:
@@ -34,20 +40,93 @@ def _verifier_perimetre(request, chemin_proprietaire_obj):
 
 # ── Biens ────────────────────────────────────────────────────────────────────
 
-class BienSerializer(serializers.ModelSerializer):
+class EquipementSerializer(CleanedModelSerializer):
+    categorie_display = serializers.CharField(source='get_categorie_display', read_only=True)
+    nb_biens = serializers.IntegerField(read_only=True, default=0)
+
+    class Meta:
+        model = Equipement
+        fields = ['id', 'nom', 'icone', 'categorie', 'categorie_display', 'nb_biens']
+
+
+class BienSerializer(CleanedModelSerializer):
     statut_display = serializers.CharField(source='get_statut_display', read_only=True)
     type_display = serializers.CharField(source='get_type_bien_display', read_only=True)
     locataire_actuel = serializers.SerializerMethodField()
+    equipements = serializers.PrimaryKeyRelatedField(many=True, queryset=Equipement.objects.all(), required=False)
+    equipements_detail = serializers.SerializerMethodField()
+    proprietaires_detail = serializers.SerializerMethodField()
+    quotes_parts_total = serializers.SerializerMethodField()
+    # À la création : propriétaire unique à 100 % (pour plusieurs propriétaires : /biens/{id}/proprietaires/).
+    proprietaire_principal = serializers.PrimaryKeyRelatedField(
+        queryset=Proprietaire.objects.all(), write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = Bien
-        exclude = ['proprietaire']
+        exclude = ['proprietaire', 'proprietaires']
         read_only_fields = ['created_at']
+
+    def to_internal_value(self, data):
+        # Envoi multipart (photo) : une liste vide ne peut pas s'écrire en formulaire, d'où un marqueur explicite.
+        if hasattr(data, 'getlist') and data.get('equipements__present') and 'equipements' not in data:
+            data = data.copy()
+            data.setlist('equipements', [])
+        return super().to_internal_value(data)
+
+    def validate_proprietaire_principal(self, proprietaire):
+        if proprietaire is not None:
+            _verifier_perimetre(self.context['request'], proprietaire.gestionnaire_id)
+        return proprietaire
 
     @extend_schema_field(dict)
     def get_locataire_actuel(self, obj):
         loc = obj.locataire_actuel
         return {'id': loc.pk, 'nom': str(loc)} if loc else None
+
+    @extend_schema_field(list)
+    def get_equipements_detail(self, obj):
+        return [{'id': e.pk, 'nom': e.nom, 'categorie': e.categorie} for e in obj.equipements.all()]
+
+    @extend_schema_field(list)
+    def get_proprietaires_detail(self, obj):
+        return [{'proprietaire': p.proprietaire_id, 'nom': str(p.proprietaire), 'quote_part': p.quote_part,
+                 'telephone': p.proprietaire.telephone} for p in obj.parts.all()]
+
+    @extend_schema_field(float)
+    def get_quotes_parts_total(self, obj):
+        return float(sum(p.quote_part for p in obj.parts.all()))
+
+
+# ── Propriétaires ────────────────────────────────────────────────────────────
+
+class ProprietaireSerializer(serializers.ModelSerializer):
+    nom_complet = serializers.CharField(source='__str__', read_only=True)
+    type_display = serializers.CharField(source='get_type_proprietaire_display', read_only=True)
+    nb_biens = serializers.IntegerField(read_only=True, default=0)
+    biens_detail = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Proprietaire
+        exclude = ['gestionnaire']
+        read_only_fields = ['created_at']
+
+    @extend_schema_field(list)
+    def get_biens_detail(self, obj):
+        return [{'id': p.bien_id, 'nom': p.bien.nom, 'quote_part': p.quote_part} for p in obj.parts.all()]
+
+
+class PartProprietaireSerializer(serializers.Serializer):
+    proprietaire = serializers.PrimaryKeyRelatedField(queryset=Proprietaire.objects.all())
+    quote_part = serializers.DecimalField(max_digits=5, decimal_places=2, min_value=Decimal('0.01'), max_value=100)
+
+
+class DefinirProprietairesSerializer(serializers.Serializer):
+    parts = PartProprietaireSerializer(many=True)
+
+    def validate_parts(self, parts):
+        for p in parts:
+            _verifier_perimetre(self.context['request'], p['proprietaire'].gestionnaire_id)
+        return parts
 
 
 # ── Locataires ───────────────────────────────────────────────────────────────
@@ -194,7 +273,7 @@ class GenererMoisSerializer(serializers.Serializer):
 
 # ── Interventions ────────────────────────────────────────────────────────────
 
-class InterventionSerializer(serializers.ModelSerializer):
+class InterventionSerializer(CleanedModelSerializer):
     bien_nom = serializers.CharField(source='bien.nom', read_only=True)
     signale_par_nom = serializers.SerializerMethodField()
     priorite_display = serializers.CharField(source='get_priorite_display', read_only=True)
@@ -231,7 +310,7 @@ class ReservationSerializer(CleanedModelSerializer):
     class Meta:
         model = Reservation
         exclude = ['token']
-        read_only_fields = ['created_at', 'montant_total']
+        read_only_fields = ['created_at', 'montant_total', 'preuve_paiement']
 
     def validate_bien(self, bien):
         _verifier_perimetre(self.context['request'], bien.proprietaire_id)
@@ -257,15 +336,59 @@ class NotificationSerializer(serializers.ModelSerializer):
         exclude = ['destinataire']
 
 
+class EnvoiNotificationSerializer(serializers.ModelSerializer):
+    canal_display = serializers.CharField(source='get_canal_display', read_only=True)
+    statut_display = serializers.CharField(source='get_statut_display', read_only=True)
+    evenement_label = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EnvoiNotification
+        fields = ['id', 'canal', 'canal_display', 'adresse', 'libelle_destinataire', 'sujet', 'evenement',
+                  'evenement_label', 'statut', 'statut_display', 'erreur', 'tentatives', 'created_at']
+
+    @extend_schema_field(str)
+    def get_evenement_label(self, obj):
+        return {**notifications.EVENEMENTS, **notifications.EVENEMENTS_TIERS}.get(obj.evenement, obj.evenement)
+
+
+class PreferencesNotificationSerializer(serializers.Serializer):
+    """Préférences de notification du gestionnaire connecté (email, WhatsApp, événements)."""
+    email = serializers.EmailField(allow_blank=True, required=False)
+    numero_whatsapp = serializers.CharField(allow_blank=True, required=False, max_length=20)
+    notif_email = serializers.BooleanField(required=False)
+    notif_whatsapp = serializers.BooleanField(required=False)
+    evenements_desactives = serializers.ListField(child=serializers.CharField(), required=False)
+
+    def validate_numero_whatsapp(self, valeur):
+        from django.core.exceptions import ValidationError as DjangoError  # type: ignore
+        from gestion.models import telephone_validator
+        from gestion.utils import normaliser_telephone
+        valeur = normaliser_telephone(valeur)
+        if valeur:
+            try:
+                telephone_validator(valeur)
+            except DjangoError as exc:
+                raise serializers.ValidationError(exc.messages)
+        return valeur
+
+    def validate_evenements_desactives(self, codes):
+        inconnus = sorted(set(codes) - set(notifications.EVENEMENTS))
+        if inconnus:
+            raise serializers.ValidationError(f'Événement(s) inconnu(s) : {", ".join(inconnus)}.')
+        return sorted(set(codes))
+
+
 # ── Public ───────────────────────────────────────────────────────────────────
 
 class PublicBienSerializer(serializers.ModelSerializer):
     type_display = serializers.CharField(source='get_type_bien_display', read_only=True)
+    equipements = serializers.SlugRelatedField(many=True, read_only=True, slug_field='nom')
 
     class Meta:
         model = Bien
         fields = ['id', 'nom', 'type_bien', 'type_display', 'adresse', 'ville', 'surface', 'nb_pieces',
-                  'etage', 'loyer_charges', 'prix_nuit', 'description', 'photo']
+                  'nb_chambres', 'nb_salles_bain', 'meuble', 'capacite', 'equipements', 'etage', 'loyer_charges',
+                  'prix_nuit', 'description', 'photo']
 
 
 class PublicReservationCreateSerializer(serializers.ModelSerializer):

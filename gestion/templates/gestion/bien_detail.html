@@ -17,10 +17,17 @@
         <tr><td style="color:var(--text-faint);padding:6px 0">Statut</td><td><span class="badge badge-{{ bien.statut }}">{{ bien.get_statut_display }}</span></td></tr>
         <tr><td style="color:var(--text-faint);padding:6px 0">Adresse</td><td>{{ bien.adresse }}<br>{{ bien.code_postal }} {{ bien.ville }}</td></tr>
         <tr><td style="color:var(--text-faint);padding:6px 0">Surface</td><td>{{ bien.surface }} m²</td></tr>
-        <tr><td style="color:var(--text-faint);padding:6px 0">Pièces</td><td>{{ bien.nb_pieces }}</td></tr>
+        <tr><td style="color:var(--text-faint);padding:6px 0">Pièces</td><td>{{ bien.nb_pieces }}{% if bien.nb_chambres %} · {{ bien.nb_chambres }} chambre{{ bien.nb_chambres|pluralize }}{% endif %} · {{ bien.nb_salles_bain }} salle{{ bien.nb_salles_bain|pluralize }} de bain{% if bien.meuble %} · meublé{% endif %}{% if bien.capacite %} · {{ bien.capacite }} pers. max{% endif %}</td></tr>
+        <tr><td style="color:var(--text-faint);padding:6px 0;vertical-align:top">Équipements</td><td>{% for e in bien.equipements.all %}<span class="badge" style="margin:0 4px 4px 0">{{ e.nom }}</span>{% empty %}<span style="color:var(--text-faint)">Aucun renseigné</span>{% endfor %}</td></tr>
+        <tr><td style="color:var(--text-faint);padding:6px 0;vertical-align:top">Propriétaires</td><td>{% for p in bien.parts.all %}{{ p.proprietaire }} ({{ p.quote_part|floatformat:"-2" }} %){% if not forloop.last %}<br>{% endif %}{% empty %}<span style="color:var(--amber)">Non renseigné (à saisir dans la nouvelle interface)</span>{% endfor %}</td></tr>
         {% if bien.etage is not None %}<tr><td style="color:var(--text-faint);padding:6px 0">Étage</td><td>{{ bien.etage }}</td></tr>{% endif %}
+        <tr><td style="color:var(--text-faint);padding:6px 0">Annonce</td><td>{{ bien.get_offre_display }}{% if bien.statut_juridique %} · {{ bien.get_statut_juridique_display }}{% endif %}</td></tr>
+        {% if bien.offre == 'vente' %}
+        <tr><td style="color:var(--text-faint);padding:6px 0">Prix de vente</td><td style="font-weight:600;color:var(--blue)">{{ bien.prix_vente|floatformat:0 }} F CFA</td></tr>
+        {% else %}
         <tr><td style="color:var(--text-faint);padding:6px 0">Loyer CC</td><td style="font-weight:600;color:var(--blue)">{{ bien.loyer_charges|floatformat:0 }} F CFA/mois</td></tr>
         <tr><td style="color:var(--text-faint);padding:6px 0">Dépôt garantie</td><td>{{ bien.depot_garantie|floatformat:0 }} F CFA</td></tr>
+        {% endif %}
         {% if bien.date_acquisition %}<tr><td style="color:var(--text-faint);padding:6px 0">Acquisition</td><td>{{ bien.date_acquisition|date:"d/m/Y" }}</td></tr>{% endif %}
         {% if bien.description %}<tr><td style="color:var(--text-faint);padding:6px 0;vertical-align:top">Description</td><td>{{ bien.description }}</td></tr>{% endif %}
       </table>
@@ -48,6 +55,49 @@
         <p style="color:var(--text-faint);font-size:13.5px">Bien vacant. <a href="{% url 'contrat_create' %}" style="color:var(--blue)">Créer un contrat</a></p>
         {% endif %}
       </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <h2>Galerie photo ({{ bien.galerie|length }})</h2>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{% url 'bien_photos_ajouter' bien.pk %}" enctype="multipart/form-data"
+            style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px">
+        {% csrf_token %}
+        <input type="file" name="photos" accept="image/*" multiple required>
+        <input type="text" name="legende" maxlength="120" placeholder="Légende (si une seule photo)" style="min-width:220px">
+        <button type="submit" class="btn btn-primary">Ajouter les photos</button>
+        <span style="font-size:12.5px;color:var(--text-faint)">Plusieurs photos à la fois possible · 8 Mo max par photo</span>
+      </form>
+
+      {% if bien.photo or bien.photos.all %}
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px">
+        {% if bien.photo %}
+        <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">
+          <img src="{{ bien.photo.url }}" alt="{{ bien.nom }}" style="width:100%;height:120px;object-fit:cover;display:block">
+          <div style="padding:8px 10px;font-size:12.5px;color:var(--text-muted)">Photo principale</div>
+        </div>
+        {% endif %}
+        {% for p in bien.photos.all %}
+        <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">
+          <a href="{{ p.image.url }}" target="_blank" rel="noopener"><img src="{{ p.image.url }}" alt="{{ p.legende|default:bien.nom }}" style="width:100%;height:120px;object-fit:cover;display:block"></a>
+          <div style="padding:8px 10px">
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:6px;min-height:16px">{{ p.legende }}</div>
+            <div style="display:flex;gap:6px">
+              {% if not forloop.first %}
+              <form method="post" action="{% url 'bien_photo_principale' bien.pk p.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm" title="Afficher avant les autres photos">↑ Avant les autres</button></form>
+              {% endif %}
+              <form method="post" action="{% url 'bien_photo_supprimer' bien.pk p.pk %}" onsubmit="return confirm('Supprimer cette photo ?')">{% csrf_token %}<button type="submit" class="btn btn-sm" style="color:#b91c1c">Supprimer</button></form>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="color:var(--text-faint);font-size:13.5px">Aucune photo pour le moment.</p>
+      {% endif %}
     </div>
   </div>
 

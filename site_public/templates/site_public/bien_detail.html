@@ -4,6 +4,16 @@
 {% block extra_css %}
 <style>
 .detail-hero { width: 100%; height: 340px; object-fit: cover; background: var(--gray-200); }
+.gal { position: relative; background: #0f172a; }
+.gal-main { width: 100%; height: 420px; object-fit: contain; display: block; background: #0f172a; }
+.gal-btn { position: absolute; top: 50%; transform: translateY(-50%); width: 42px; height: 42px; border-radius: 50%; border: 0;
+  background: rgba(255,255,255,.9); font-size: 20px; cursor: pointer; }
+.gal-prev { left: 14px; } .gal-next { right: 14px; }
+.gal-count { position: absolute; bottom: 12px; right: 14px; background: rgba(0,0,0,.65); color: #fff; font-size: 12.5px; padding: 4px 10px; border-radius: 999px; }
+.gal-thumbs { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; }
+.gal-thumbs img { width: 92px; height: 66px; object-fit: cover; border-radius: 8px; cursor: pointer; opacity: .6; border: 2px solid transparent; flex: none; }
+.gal-thumbs img.active { opacity: 1; border-color: var(--blue, #2563eb); }
+@media (max-width: 640px) { .gal-main { height: 260px; } }
 .detail-hero-placeholder { width: 100%; height: 340px; background: linear-gradient(135deg, var(--blue-light), var(--gray-100));
   display: flex; align-items: center; justify-content: center; font-size: 64px; }
 .detail-wrap { display: grid; grid-template-columns: 1.6fr 1fr; gap: 32px; padding: 32px 0 64px; align-items: start; }
@@ -21,31 +31,86 @@
 .contact-box .card-body { padding: 22px; }
 .contact-box h3 { font-size: 15.5px; margin: 18px 0 4px; }
 .similar-section { padding: 0 0 60px; }
+.equip-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.equip-chip { background: var(--bg-soft, #f1f5f9); border: 1px solid var(--border, #e2e8f0); border-radius: 999px; padding: 5px 13px; font-size: 13px; }
 </style>
 {% endblock %}
 
 {% block content %}
-{% if bien.photo %}
-<img class="detail-hero" src="{{ bien.photo.url }}" alt="{{ bien.nom }}">
+{% with photos=bien.galerie %}
+{% if photos %}
+<div class="gal" id="gal">
+  <img class="gal-main" id="gal-main" src="{{ photos.0.url }}" alt="{{ photos.0.legende }}">
+  {% if photos|length > 1 %}
+  <button type="button" class="gal-btn gal-prev" id="gal-prev" aria-label="Photo précédente">‹</button>
+  <button type="button" class="gal-btn gal-next" id="gal-next" aria-label="Photo suivante">›</button>
+  <span class="gal-count" id="gal-count">1 / {{ photos|length }}</span>
+  {% endif %}
+</div>
+{% if photos|length > 1 %}
+<div class="container"><div class="gal-thumbs" id="gal-thumbs">
+  {% for p in photos %}<img src="{{ p.url }}" alt="{{ p.legende }}" data-i="{{ forloop.counter0 }}" class="{% if forloop.first %}active{% endif %}" loading="lazy">{% endfor %}
+</div></div>
+<script>
+(function () {
+  var imgs = Array.prototype.slice.call(document.querySelectorAll('#gal-thumbs img'));
+  var main = document.getElementById('gal-main'), count = document.getElementById('gal-count'), i = 0;
+  function show(n) {
+    i = (n + imgs.length) % imgs.length;
+    main.src = imgs[i].src; main.alt = imgs[i].alt;
+    count.textContent = (i + 1) + ' / ' + imgs.length;
+    imgs.forEach(function (t, k) { t.classList.toggle('active', k === i); });
+    imgs[i].scrollIntoView({block: 'nearest', inline: 'center'});
+  }
+  imgs.forEach(function (t, k) { t.addEventListener('click', function () { show(k); }); });
+  document.getElementById('gal-prev').addEventListener('click', function () { show(i - 1); });
+  document.getElementById('gal-next').addEventListener('click', function () { show(i + 1); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'ArrowLeft') show(i - 1); if (e.key === 'ArrowRight') show(i + 1); });
+})();
+</script>
+{% endif %}
 {% else %}
 <div class="detail-hero-placeholder">🏠</div>
 {% endif %}
+{% endwith %}
 
 <div class="container">
   <div class="detail-wrap">
     <div class="detail-main">
-      <span class="badge badge-libre">Disponible</span>
+      <span class="badge badge-libre">{% if bien.offre == 'vente' %}À vendre{% else %}Disponible{% endif %}</span>
+      {% if bien.statut_juridique %}<span class="badge">{{ bien.get_statut_juridique_display }}</span>{% endif %}
       <h1 style="margin-top:10px">{{ bien.nom }}</h1>
       <div class="detail-loc">📍 {{ bien.adresse }}, {{ bien.code_postal }} {{ bien.ville }}</div>
 
       <div class="detail-meta-row">
         <div class="detail-meta-item"><div class="v">{{ bien.get_type_bien_display }}</div><div class="l">Type</div></div>
         <div class="detail-meta-item"><div class="v">{{ bien.surface }} m²</div><div class="l">Surface</div></div>
+        {% if bien.type_bien != 'terrain' %}
         <div class="detail-meta-item"><div class="v">{{ bien.nb_pieces }}</div><div class="l">Pièce{{ bien.nb_pieces|pluralize }}</div></div>
+        {% endif %}
         {% if bien.etage != None %}
         <div class="detail-meta-item"><div class="v">{{ bien.etage }}</div><div class="l">Étage</div></div>
         {% endif %}
+        {% if bien.nb_chambres %}
+        <div class="detail-meta-item"><div class="v">{{ bien.nb_chambres }}</div><div class="l">Chambre{{ bien.nb_chambres|pluralize }}</div></div>
+        {% endif %}
+        {% if bien.nb_salles_bain %}
+        <div class="detail-meta-item"><div class="v">{{ bien.nb_salles_bain }}</div><div class="l">Salle{{ bien.nb_salles_bain|pluralize }} de bain</div></div>
+        {% endif %}
+        {% if bien.capacite %}
+        <div class="detail-meta-item"><div class="v">{{ bien.capacite }}</div><div class="l">Personnes max.</div></div>
+        {% endif %}
       </div>
+
+      {% if bien.meuble or bien.equipements.all %}
+      <div class="detail-desc">
+        <h2>Équipements</h2>
+        <div class="equip-list">
+          {% if bien.meuble %}<span class="equip-chip">Meublé</span>{% endif %}
+          {% for e in bien.equipements.all %}<span class="equip-chip">{{ e.nom }}</span>{% endfor %}
+        </div>
+      </div>
+      {% endif %}
 
       <div class="detail-desc">
         <h2>Description</h2>
@@ -60,12 +125,17 @@
     <div class="contact-box">
       <div class="card">
         <div class="card-body">
+          {% if bien.offre == 'vente' %}
+          <div class="price">{{ bien.prix_vente|floatformat:0 }} F CFA</div>
+          {% if bien.statut_juridique %}<p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">{{ bien.get_statut_juridique_display }}</p>{% endif %}
+          {% else %}
           <div class="price">{{ bien.loyer_charges|floatformat:0 }} F CFA <span>/ mois, charges comprises</span></div>
-          {% if bien.depot_garantie %}
+          {% endif %}
+          {% if bien.offre != 'vente' and bien.depot_garantie %}
           <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Dépôt de garantie : {{ bien.depot_garantie|floatformat:0 }} F CFA</p>
           {% endif %}
 
-          <h3>Intéressé(e) par ce bien ?</h3>
+          <h3>Intéressé(e) par {% if bien.type_bien == 'terrain' %}ce terrain{% else %}ce bien{% endif %} ?</h3>
           <form method="post">
             {% csrf_token %}
             {{ form.bien }}
@@ -100,15 +170,15 @@
     <div class="property-grid">
       {% for b in autres_biens %}
       <a href="{% url 'bien_public_detail' b.pk %}" class="property-card card">
-        {% if b.photo %}
-          <img class="property-photo" src="{{ b.photo.url }}" alt="{{ b.nom }}">
+        {% if b.photo_principale %}
+          <img class="property-photo" src="{{ b.photo_principale.url }}" alt="{{ b.nom }}">
         {% else %}
           <div class="property-photo-placeholder">🏠</div>
         {% endif %}
         <div class="property-body">
           <div class="property-title">{{ b.nom }}</div>
           <div class="property-loc">📍 {{ b.ville }}</div>
-          <div class="property-price">{{ b.loyer_charges|floatformat:0 }} F CFA <span>/ mois CC</span></div>
+          <div class="property-price">{% if b.offre == 'vente' %}{{ b.prix_vente|floatformat:0 }} F CFA{% else %}{{ b.loyer_charges|floatformat:0 }} F CFA <span>/ mois CC</span>{% endif %}</div>
         </div>
       </a>
       {% endfor %}

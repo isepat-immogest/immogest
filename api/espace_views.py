@@ -78,8 +78,9 @@ class EspaceInterventionViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         data = sz.SignalementLocataireSerializer(data=request.data)
         data.is_valid(raise_exception=True)
         inter = Intervention.objects.create(bien=contrat.bien, signale_par=request.user, **data.validated_data)
-        services.notifier(services.gestionnaires_a_notifier(contrat.bien),
-                          f'Signalement : {inter.titre}', f'{locataire} — {contrat.bien.nom}',
-                          lien='/interventions', email=True)
+        services.notifier_gestionnaires(
+            contrat.bien, f'Signalement : {inter.titre}',
+            f'{locataire} ({locataire.telephone}) — {contrat.bien.nom} — priorité {inter.get_priorite_display().lower()}.'
+            f'\n{inter.description[:200]}', lien='/interventions', evenement='signalement')
         return Response(sz.InterventionSerializer(inter, context={'request': request}).data,
                         status=status.HTTP_201_CREATED)

@@ -19,6 +19,8 @@ const Reservations = lazy(() => import('@/pages/Reservations'))
 const Demandes = lazy(() => import('@/pages/Demandes'))
 const Depenses = lazy(() => import('@/pages/Depenses'))
 const Calendrier = lazy(() => import('@/pages/Calendrier'))
+const Proprietaires = lazy(() => import('@/pages/Proprietaires'))
+const Parametres = lazy(() => import('@/pages/Parametres'))
 const EspaceAccueil = lazy(() => import('@/pages/espace/EspaceAccueil'))
 const EspacePaiements = lazy(() => import('@/pages/espace/EspacePaiements'))
 const EspaceSignalements = lazy(() => import('@/pages/espace/EspaceSignalements'))
@@ -74,6 +76,8 @@ export default function App() {
           <Route path="demandes" element={<Demandes />} />
           <Route path="depenses" element={<Depenses />} />
           <Route path="calendrier" element={<Calendrier />} />
+          <Route path="proprietaires" element={<Proprietaires />} />
+          <Route path="parametres" element={<Parametres />} />
         </Route>
 
         <Route

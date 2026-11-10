@@ -7,9 +7,11 @@ import {
   Inbox,
   KeyRound,
   LogOut,
+  BellRing,
   Menu,
   Moon,
   PiggyBank,
+  UserCog,
   Search,
   Sun,
   Users,
@@ -41,6 +43,7 @@ interface NavItem {
 const GESTION_NAV: NavItem[] = [
   { to: '/', label: 'Tableau de bord', icon: Home, end: true, preload: () => import('@/pages/Dashboard') },
   { to: '/biens', label: 'Biens', icon: Building2, preload: () => import('@/pages/Biens') },
+  { to: '/proprietaires', label: 'Propriétaires', icon: UserCog, preload: () => import('@/pages/Proprietaires') },
   { to: '/locataires', label: 'Locataires', icon: Users, preload: () => import('@/pages/Locataires') },
   { to: '/contrats', label: 'Contrats', icon: FileText, preload: () => import('@/pages/Contrats') },
   { to: '/paiements', label: 'Paiements', icon: Wallet, preload: () => import('@/pages/Paiements') },
@@ -49,6 +52,7 @@ const GESTION_NAV: NavItem[] = [
   { to: '/calendrier', label: 'Calendrier', icon: CalendarDays, preload: () => import('@/pages/Calendrier') },
   { to: '/depenses', label: 'Dépenses', icon: PiggyBank, preload: () => import('@/pages/Depenses') },
   { to: '/demandes', label: 'Demandes clients', icon: Inbox, preload: () => import('@/pages/Demandes') },
+  { to: '/parametres', label: 'Notifications', icon: BellRing, preload: () => import('@/pages/Parametres') },
 ]
 
 const LOCATAIRE_NAV: NavItem[] = [

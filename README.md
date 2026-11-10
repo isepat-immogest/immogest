@@ -10,6 +10,15 @@ Application de gestion locative pour le Sénégal (FCFA, Wave / Orange Money / F
 | Données | PostgreSQL (prod) / SQLite (dev), PDF reportlab, export Excel openpyxl |
 | Qualité | pytest (31 tests), Vitest (11 tests), GitHub Actions, Docker |
 
+## Nouveautés : équipements, propriétaires, notifications WhatsApp / email
+
+Détail complet et mode d'emploi : **`AJOUTS_EQUIPEMENTS_PROPRIETAIRES_NOTIFICATIONS.md`**.
+
+- **Équipements** (36 de départ, extensibles) sur chaque bien, loué ou libre, visibles sur le site public et filtrables.
+- **Propriétaires multiples** : un bien peut avoir plusieurs propriétaires (quotes-parts = 100 %), commission de gestion, relevé de reversement mensuel.
+- **Notifications du gestionnaire** par cloche + email + WhatsApp (Meta Cloud API ou Twilio), préférences par événement, journal des envois, nouvelle tentative automatique.
+- **Cohérence des données** : règles métier renforcées et contrôle des anomalies sur le tableau de bord.
+
 ## Les trois surfaces
 
 | URL | Contenu |

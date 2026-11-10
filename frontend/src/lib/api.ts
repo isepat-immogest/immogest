@@ -72,6 +72,7 @@ export const api = {
   get: <T>(path: string, params?: Params) => request<T>('GET', path, undefined, params),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body ?? {}),
   patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
+  put: <T>(path: string, body: unknown) => request<T>('PUT', path, body),
   delete: (path: string) => request<void>('DELETE', path),
   /** Prépare le cookie CSRF (à appeler une fois au démarrage). */
   ensureCsrf: () => request<unknown>('GET', '/auth/csrf/'),

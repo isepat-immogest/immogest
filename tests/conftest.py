@@ -14,6 +14,28 @@ def vider_cache():
     cache.clear()
 
 
+@pytest.fixture(autouse=True)
+def envois_immediats(monkeypatch):
+    """En production les messages partent après validation de la transaction (on_commit) ; dans les tests,
+    chaque test vit dans une transaction jamais validée : on exécute donc l'envoi tout de suite."""
+    monkeypatch.setattr('gestion.notifications.transaction.on_commit', lambda fonction, using=None: fonction())
+
+
+@pytest.fixture(autouse=True)
+def statiques_sans_manifeste(settings):
+    """En test, pas de manifeste collectstatic : on teste les pages, pas le cache-busting (fait au build)."""
+    settings.STORAGES = {**settings.STORAGES, 'staticfiles': {
+        'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}}
+
+
+@pytest.fixture(autouse=True)
+def whatsapp_desactive(settings):
+    """Aucun test ne contacte un vrai fournisseur WhatsApp : désactivé par défaut, activé au cas par cas."""
+    settings.WHATSAPP_PROVIDER = ''
+    settings.SITE_URL = 'https://immogest.test'
+    settings.NOTIFICATIONS_EMAIL_DEFAUT = ''     # indépendant de l'EMAIL_HOST_USER du .env réel
+
+
 @pytest.fixture
 def gestionnaire(db):
     return User.objects.create_user('agent', 'agent@example.com', 'Motdepasse-Solide-1')

@@ -180,6 +180,24 @@ else:
     DEFAULT_FROM_EMAIL = 'noreply@immogest.local'
 
 
+# ── Notifications WhatsApp (alertes envoyées au gestionnaire) ─────────────
+# Adresse publique du site, utilisée pour les liens « Ouvrir dans ImmoGest » des emails et WhatsApp.
+# Adresse qui reçoit les alertes quand le compte du gestionnaire n'a pas d'email (par défaut : le compte SMTP).
+NOTIFICATIONS_EMAIL_DEFAUT = os.environ.get('NOTIFICATIONS_EMAIL_DEFAUT', '') or os.environ.get('EMAIL_HOST_USER', '')
+
+SITE_URL = os.environ.get('SITE_URL', 'http://localhost:8000' if DEBUG else '').rstrip('/')
+
+# WHATSAPP_PROVIDER : « cloud » (Meta WhatsApp Business), « twilio », « console » (journal seulement) ou vide (désactivé).
+WHATSAPP_PROVIDER = os.environ.get('WHATSAPP_PROVIDER', 'console' if DEBUG else '').strip().lower()
+WHATSAPP_TOKEN = os.environ.get('WHATSAPP_TOKEN', '')
+WHATSAPP_PHONE_NUMBER_ID = os.environ.get('WHATSAPP_PHONE_NUMBER_ID', '')
+WHATSAPP_API_VERSION = os.environ.get('WHATSAPP_API_VERSION', 'v20.0')
+WHATSAPP_TEMPLATE_NAME = os.environ.get('WHATSAPP_TEMPLATE_NAME', '')   # modèle approuvé à 1 variable {{1}}
+WHATSAPP_TEMPLATE_LANG = os.environ.get('WHATSAPP_TEMPLATE_LANG', 'fr')
+TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
+TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
+TWILIO_WHATSAPP_FROM = os.environ.get('TWILIO_WHATSAPP_FROM', '')       # ex : +14155238886 (bac à sable Twilio)
+
 # ── API REST (DRF) ────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [

@@ -26,6 +26,7 @@ import {
 } from 'recharts'
 
 import { EmptyState, ErrorState, PageHeader, StatCard, StatusBadge } from '@/components/common'
+import { CoherenceCard } from '@/components/CoherenceCard'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -85,6 +86,8 @@ export default function Dashboard() {
           </>
         }
       />
+
+      <div className="mb-4"><CoherenceCard /></div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {isPending || !k ? (

@@ -10,8 +10,8 @@ import { cn } from '@/lib/utils'
 export interface FieldDef {
   name: string
   label: string
-  type?: 'text' | 'number' | 'email' | 'tel' | 'date' | 'textarea' | 'select' | 'file'
-  options?: { value: string | number; label: string }[]
+  type?: 'text' | 'number' | 'email' | 'tel' | 'date' | 'textarea' | 'select' | 'file' | 'checkbox' | 'multiselect'
+  options?: { value: string | number; label: string; group?: string }[]
   required?: boolean
   /** Une valeur vide est envoyée comme null (sinon la clé est omise et la valeur par défaut du serveur s'applique). */
   nullable?: boolean
@@ -36,12 +36,24 @@ interface FormDialogProps {
   onSubmit: (payload: Values | FormData) => Promise<unknown>
 }
 
+function groupOptions(options: FieldDef['options'] = []): [string, NonNullable<FieldDef['options']>][] {
+  const groupes = new Map<string, NonNullable<FieldDef['options']>>()
+  for (const o of options) groupes.set(o.group ?? '', [...(groupes.get(o.group ?? '') ?? []), o])
+  return [...groupes.entries()]
+}
+
 /** Construit le corps de requête : JSON, ou FormData dès qu'un fichier est présent. */
 export function buildPayload(fields: FieldDef[], values: Values): Values | FormData {
   const out: Values = {}
   let hasFile = false
   for (const f of fields) {
     const v = values[f.name]
+    if (f.type === 'multiselect') {
+      // react-hook-form renvoie les cases cochées sous forme de chaînes ; l'API attend des identifiants.
+      const ids = (Array.isArray(v) ? v : v ? [v] : []).map((x) => Number(x)).filter((x) => Number.isFinite(x))
+      out[f.name] = ids
+      continue
+    }
     if (f.type === 'file') {
       const file = (v as FileList | undefined)?.[0]
       if (file) {
@@ -59,7 +71,13 @@ export function buildPayload(fields: FieldDef[], values: Values): Values | FormD
   }
   if (!hasFile) return out
   const fd = new FormData()
-  for (const [k, v] of Object.entries(out)) if (v !== null) fd.append(k, v instanceof File ? v : String(v))
+  for (const [k, v] of Object.entries(out)) {
+    if (Array.isArray(v)) {
+      // Une liste vide ne peut pas s'écrire en formulaire : un marqueur dit au serveur de la vider.
+      if (v.length === 0) fd.append(`${k}__present`, '1')
+      v.forEach((item) => fd.append(k, String(item)))
+    } else if (v !== null) fd.append(k, v instanceof File ? v : String(v))
+  }
   return fd
 }
 
@@ -132,7 +150,29 @@ export function FormDialog({
                     {f.label}
                     {f.required && <span className="text-destructive"> *</span>}
                   </label>
-                  {f.type === 'textarea' ? (
+                  {f.type === 'checkbox' ? (
+                    <label className="flex h-10 items-center gap-2 text-sm">
+                      <input type="checkbox" className="h-4 w-4 rounded border-input accent-primary" {...register(f.name)} />
+                      {f.hint ?? 'Oui'}
+                    </label>
+                  ) : f.type === 'multiselect' ? (
+                    <div className="max-h-52 space-y-3 overflow-y-auto rounded-md border border-input bg-card p-3" role="group" aria-label={f.label}>
+                      {groupOptions(f.options).map(([groupe, opts]) => (
+                        <fieldset key={groupe}>
+                          {groupe && <legend className="mb-1 text-xs font-medium text-muted-foreground">{groupe}</legend>}
+                          <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                            {opts.map((o) => (
+                              <label key={o.value} className="flex items-center gap-2 text-sm">
+                                <input type="checkbox" value={o.value} className="h-4 w-4 rounded border-input accent-primary" {...register(f.name)} />
+                                {o.label}
+                              </label>
+                            ))}
+                          </div>
+                        </fieldset>
+                      ))}
+                      {(f.options?.length ?? 0) === 0 && <p className="text-sm text-muted-foreground">Chargement…</p>}
+                    </div>
+                  ) : f.type === 'textarea' ? (
                     <Textarea {...common} rows={3} placeholder={f.placeholder} {...register(f.name)} />
                   ) : f.type === 'select' ? (
                     <Select {...common} {...register(f.name)}>

@@ -31,12 +31,107 @@ export interface Bien {
   surface: string
   nb_pieces: number
   etage: number | null
+  offre: 'location' | 'vente'
   loyer_charges: string
+  prix_vente: string | null
+  statut_juridique: string
   prix_nuit: string | null
   depot_garantie: string
   description: string
   photo: string | null
+  nb_chambres: number
+  nb_salles_bain: number
+  meuble: boolean
+  capacite: number | null
+  equipements: number[]
+  equipements_detail: { id: number; nom: string; categorie: string }[]
+  proprietaires_detail: { proprietaire: number; nom: string; quote_part: string | number; telephone: string }[]
+  quotes_parts_total: number
   locataire_actuel: { id: number; nom: string } | null
+  created_at: string
+}
+
+export interface Equipement {
+  id: number
+  nom: string
+  categorie: string
+  categorie_display: string
+  nb_biens: number
+}
+
+export interface Proprietaire {
+  id: number
+  type_proprietaire: 'personne' | 'societe'
+  type_display: string
+  prenom: string
+  nom: string
+  nom_complet: string
+  email: string
+  telephone: string
+  whatsapp: string
+  adresse: string
+  commission_pct: string
+  compte_reversement: string
+  notif_email: boolean
+  notif_whatsapp: boolean
+  notes: string
+  actif: boolean
+  nb_biens: number
+  biens_detail: { id: number; nom: string; quote_part: string | number }[]
+}
+
+export interface ReleveProprietaire {
+  mois: string
+  commission_pct: string | number
+  lignes: {
+    bien: number
+    bien_nom: string
+    quote_part: string | number
+    encaisse_total: number | string
+    encaisse_part: number | string
+    commission: number | string
+    depenses_part: number | string
+    net: number | string
+  }[]
+  totaux: { encaisse_part: number | string; commission: number | string; depenses_part: number | string; net: number | string }
+}
+
+export interface Anomalie {
+  code: string
+  gravite: 'erreur' | 'avertissement'
+  message: string
+  url: string
+}
+
+export interface Coherence {
+  total: number
+  erreurs: number
+  avertissements: number
+  anomalies: Anomalie[]
+}
+
+export interface PreferencesNotification {
+  email: string
+  numero_whatsapp: string
+  notif_email: boolean
+  notif_whatsapp: boolean
+  evenements_desactives: string[]
+  evenements: { code: string; label: string; actif: boolean }[]
+  whatsapp_disponible: boolean
+  whatsapp_fournisseur: string
+}
+
+export interface EnvoiNotification {
+  id: number
+  canal: 'email' | 'whatsapp'
+  canal_display: string
+  adresse: string
+  libelle_destinataire: string
+  sujet: string
+  evenement_label: string
+  statut: 'envoye' | 'echec' | 'ignore'
+  statut_display: string
+  erreur: string
   created_at: string
 }
 
@@ -48,6 +143,7 @@ export interface Locataire {
   initiales: string
   email: string
   telephone: string
+  notif_whatsapp: boolean
   date_naissance: string | null
   profession: string
   revenu_mensuel: string | null
@@ -174,6 +270,7 @@ export interface Dashboard {
     biens_loues: number
     biens_libres: number
     biens_travaux: number
+    biens_sans_proprietaire: number
     taux_occupation: number
     revenus_mois: number | string
     prevu_mois: number | string

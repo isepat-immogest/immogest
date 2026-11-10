@@ -6,8 +6,9 @@ from .scope import proprietaires_visibles
 class BienForm(forms.ModelForm):
     class Meta:
         model = Bien
-        exclude = ['proprietaire', 'created_at']
+        exclude = ['proprietaire', 'proprietaires', 'created_at']
         widgets = {
+            'equipements': forms.CheckboxSelectMultiple(),
             'date_acquisition': forms.DateInput(attrs={'type': 'date'}),
             'description': forms.Textarea(attrs={'rows': 3}),
         }

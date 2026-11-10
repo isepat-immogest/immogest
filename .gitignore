@@ -26,3 +26,4 @@ frontend/dist/
 *.log
 
 immogest-github/
+db.sqlite3.*

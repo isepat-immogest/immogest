@@ -23,6 +23,7 @@ export const LOCATAIRE_FIELDS: FieldDef[] = [
   { name: 'telephone', label: 'Téléphone', type: 'tel', required: true, placeholder: '+221 77 123 45 67' },
   { name: 'email', label: 'Email', type: 'email', hint: "Nécessaire pour envoyer l'invitation à l'espace locataire." },
   { name: 'date_naissance', label: 'Date de naissance', type: 'date', nullable: true },
+  { name: 'notif_whatsapp', label: 'WhatsApp', type: 'checkbox', hint: 'Le locataire accepte les messages WhatsApp (reçus de paiement, rappels de loyer)' },
   { name: 'profession', label: 'Profession' },
   { name: 'revenu_mensuel', label: 'Revenu mensuel (FCFA)', type: 'number', nullable: true },
   { name: 'adresse_precedente', label: 'Adresse précédente' },

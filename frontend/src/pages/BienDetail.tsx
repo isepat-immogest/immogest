@@ -6,7 +6,9 @@ import { toast } from 'sonner'
 
 import { EmptyState, ErrorState, PageHeader, StatusBadge } from '@/components/common'
 import { DocumentsPanel } from '@/components/DocumentsPanel'
+import { ProprietairesPanel } from '@/components/ProprietairesPanel'
 import { FormDialog } from '@/components/FormDialog'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -16,7 +18,7 @@ import { STATUT_BIEN, STATUT_CONTRAT, STATUT_INTERVENTION, STATUT_PAIEMENT, PRIO
 import { useDetail, useList, useSave } from '@/lib/queries'
 import type { Bien, Contrat, Intervention, Paiement, Rentabilite } from '@/lib/types'
 import { formatDate, formatFCFA, formatMois } from '@/lib/utils'
-import { BIEN_FIELDS } from '@/pages/Biens'
+import { bienDefaults, useBienFields } from '@/lib/catalogues'
 
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -36,6 +38,7 @@ export default function BienDetail() {
   const rentabilite = useQuery({ queryKey: ['/biens', 'rentabilite', id], queryFn: () => api.get<Rentabilite>(`/biens/${id}/rentabilite/`), enabled: !!id })
   const save = useSave<Bien>('/biens')
   const [editing, setEditing] = useState(false)
+  const fields = useBienFields(bien.data ?? null)
 
   if (bien.isError) return <ErrorState message="Bien introuvable." />
   if (bien.isPending) return <Skeleton className="h-96" />
@@ -57,8 +60,12 @@ export default function BienDetail() {
               <Info label="Type" value={b.type_display} />
               <Info label="Surface" value={`${b.surface} m²`} />
               <Info label="Pièces" value={b.nb_pieces} />
+              <Info label="Chambres" value={b.nb_chambres || null} />
+              <Info label="Salles de bain" value={b.nb_salles_bain || null} />
+              <Info label="Capacité" value={b.capacite ? `${b.capacite} pers.` : null} />
+              <Info label="Meublé" value={b.meuble ? 'Oui' : 'Non'} />
               <Info label="Étage" value={b.etage} />
-              <Info label="Loyer" value={formatFCFA(b.loyer_charges)} />
+              <Info label={b.offre === 'vente' ? 'Prix de vente' : 'Loyer'} value={formatFCFA(b.offre === 'vente' ? (b.prix_vente ?? 0) : b.loyer_charges)} />
               <Info label="Dépôt de garantie" value={formatFCFA(b.depot_garantie)} />
               <Info label="Tarif / nuit" value={b.prix_nuit ? formatFCFA(b.prix_nuit) : null} />
               <Info label="Locataire" value={b.locataire_actuel ? <Link className="text-primary hover:underline" to={`/locataires/${b.locataire_actuel.id}`}>{b.locataire_actuel.nom}</Link> : null} />
@@ -81,7 +88,22 @@ export default function BienDetail() {
           </CardContent>
         </Card>
 
-        <div className="lg:col-span-2">
+        <Card className="lg:col-span-2">
+          <CardHeader><CardTitle>Équipements</CardTitle></CardHeader>
+          <CardContent>
+            {b.equipements_detail.length ? (
+              <div className="flex flex-wrap gap-2">
+                {b.equipements_detail.map((e) => <Badge key={e.id} tone="outline">{e.nom}</Badge>)}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Aucun équipement renseigné. Utilisez « Modifier » pour cocher ceux du bien (climatisation, citerne, groupe électrogène…).</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="lg:col-span-1"><ProprietairesPanel bien={b} /></div>
+
+        <div className="lg:col-span-3">
           <Tabs defaultValue="paiements">
             <TabsList>
               <TabsTrigger value="paiements">Paiements</TabsTrigger>
@@ -131,8 +153,8 @@ export default function BienDetail() {
         open={editing}
         onOpenChange={setEditing}
         title="Modifier le bien"
-        fields={BIEN_FIELDS}
-        defaultValues={{ ...b, photo: undefined }}
+        fields={fields}
+        defaultValues={bienDefaults(b)}
         onSubmit={async (payload) => {
           await save.mutateAsync({ id: b.id, data: payload })
           toast.success('Bien modifié.')

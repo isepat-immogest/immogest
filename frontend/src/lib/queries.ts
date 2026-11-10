@@ -57,7 +57,10 @@ export function useDelete(path: string, related: string[] = []) {
       invalidateAll(qc, path, ...related)
       toast.success('Supprimé.')
     },
-    onError: notifyError,
+    // « Ce bien a un contrat actif… » : refus métier, à montrer (notifyError ignore les erreurs de formulaire).
+    onError: (error) => {
+      if (error instanceof ApiError && error.code === 'validation_error') toast.error(error.message)
+    },
   })
 }
 

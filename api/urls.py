@@ -3,7 +3,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView  # 
 from rest_framework.routers import DefaultRouter  # type: ignore
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView  # type: ignore
 
-from . import auth_views, espace_views, public_views, views
+from . import auth_views, espace_views, notif_views, public_views, views
 
 router = DefaultRouter()
 router.register('biens', views.BienViewSet, basename='bien')
@@ -15,6 +15,8 @@ router.register('reservations', views.ReservationViewSet, basename='reservation'
 router.register('demandes', views.DemandeViewSet, basename='demande')
 router.register('depenses', views.DepenseViewSet, basename='depense')
 router.register('documents', views.DocumentViewSet, basename='document')
+router.register('proprietaires', views.ProprietaireViewSet, basename='proprietaire')
+router.register('equipements', views.EquipementViewSet, basename='equipement')
 router.register('notifications', views.NotificationViewSet, basename='notification')
 
 espace = DefaultRouter()
@@ -36,6 +38,10 @@ urlpatterns = [
     # Gestion
     path('dashboard/', views.DashboardView.as_view()),
     path('recherche/', views.SearchView.as_view()),
+    path('coherence/', views.CoherenceView.as_view()),
+    path('me/notifications/', notif_views.PreferencesNotificationView.as_view()),
+    path('me/notifications/test/', notif_views.TestNotificationView.as_view()),
+    path('me/notifications/envois/', notif_views.EnvoisNotificationList.as_view()),
     path('calendrier/', views.CalendrierView.as_view()),
     path('rapports/financier/', views.RapportFinancierView.as_view()),
     path('', include(router.urls)),

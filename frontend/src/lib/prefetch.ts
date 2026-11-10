@@ -8,6 +8,7 @@ type Params = Record<string, string | number>
 const LISTES: Record<string, { path: string; params: Params }> = {
   '/biens': { path: '/biens', params: { page: 1, search: '', statut: '' } },
   '/locataires': { path: '/locataires', params: { page: 1, search: '' } },
+  '/proprietaires': { path: '/proprietaires', params: { page: 1, search: '' } },
   '/contrats': { path: '/contrats', params: { page: 1, statut: '' } },
   '/paiements': { path: '/paiements', params: { page: 1, statut: '' } },
   '/reservations': { path: '/reservations', params: { page: 1, statut: '' } },

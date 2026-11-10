@@ -58,6 +58,23 @@ export const TYPES_BIEN = [
   { value: 'studio', label: 'Studio' },
   { value: 'commerce', label: 'Local commercial' },
   { value: 'garage', label: 'Garage' },
+  { value: 'chambre', label: 'Chambre' },
+  { value: 'piscine', label: 'Piscine' },
+  { value: 'Hotel', label: 'Hôtel' },
+  { value: 'terrain', label: 'Terrain' },
+  { value: 'villa', label: 'Villa' },
+]
+
+export const OFFRES_BIEN = [
+  { value: 'location', label: 'À louer' },
+  { value: 'vente', label: 'À vendre' },
+]
+
+export const STATUTS_JURIDIQUES = [
+  { value: 'titre_foncier', label: 'Titre foncier' },
+  { value: 'bail', label: 'Bail' },
+  { value: 'deliberation', label: 'Délibération' },
+  { value: 'autre', label: 'Autre' },
 ]
 
 export const STATUTS_BIEN = [

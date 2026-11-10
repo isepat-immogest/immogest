@@ -12,8 +12,8 @@ from rest_framework.response import Response  # type: ignore
 from rest_framework.views import APIView  # type: ignore
 
 from gestion import services
-from gestion.models import (Bien, Contrat, DemandeContact, Depense, Document, Intervention, Locataire,
-                            Notification, Paiement, Reservation)
+from gestion.models import (Bien, Contrat, DemandeContact, Depense, Document, EnvoiNotification, Equipement,
+                            Intervention, Locataire, Notification, Paiement, Proprietaire, Reservation)
 from gestion.pdf_utils import generer_quittance_pdf, generer_rapport_financier_pdf
 from gestion.scope import proprietaires_visibles
 from gestion.utils import mois_annee_fr_abrege
@@ -41,12 +41,34 @@ class BienViewSet(ScopedViewSet):
     ordering_fields = ['nom', 'loyer_charges', 'created_at', 'surface']
 
     def get_queryset(self):
-        return super().get_queryset().prefetch_related(Prefetch(
-            'contrats', queryset=Contrat.objects.filter(statut='actif').select_related('locataire'),
-            to_attr='_contrats_actifs'))
+        return super().get_queryset().prefetch_related(
+            'equipements', 'parts__proprietaire',
+            Prefetch('contrats', queryset=Contrat.objects.filter(statut='actif').select_related('locataire'),
+                     to_attr='_contrats_actifs'))
 
     def perform_create(self, serializer):
-        serializer.save(proprietaire=self.request.user)
+        principal = serializer.validated_data.pop('proprietaire_principal', None)
+        bien = serializer.save(proprietaire=self.request.user)
+        if principal is not None:
+            services.definir_proprietaires_bien(bien, [(principal, 100)])
+
+    def perform_destroy(self, instance):
+        services.verifier_suppression_bien(instance)
+        super().perform_destroy(instance)
+
+    @extend_schema(request=sz.DefinirProprietairesSerializer, responses={200: dict})
+    @action(detail=True, methods=['get', 'put'])
+    def proprietaires(self, request, pk=None):
+        """GET : propriétaires et quotes-parts. PUT : les remplace (la somme doit valoir 100 %)."""
+        bien = self.get_object()
+        if request.method == 'PUT':
+            data = sz.DefinirProprietairesSerializer(data=request.data, context={'request': request})
+            data.is_valid(raise_exception=True)
+            services.definir_proprietaires_bien(
+                bien, [(p['proprietaire'], p['quote_part']) for p in data.validated_data['parts']])
+            bien = self.get_object()
+        s = self.get_serializer(bien).data
+        return Response({'parts': s['proprietaires_detail'], 'total': s['quotes_parts_total']})
 
     @extend_schema(responses={200: dict})
     @action(detail=True, methods=['get'])
@@ -69,6 +91,10 @@ class LocataireViewSet(ScopedViewSet):
 
     def perform_create(self, serializer):
         serializer.save(proprietaire=self.request.user)
+
+    def perform_destroy(self, instance):
+        services.verifier_suppression_locataire(instance)
+        super().perform_destroy(instance)
 
     @extend_schema(responses={200: dict})
     @action(detail=True, methods=['get'])
@@ -110,7 +136,8 @@ class ContratViewSet(ScopedViewSet):
         contrat = self.get_object()
         data = sz.ResiliationSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        services.resilier_contrat(contrat, data.validated_data.get('date_fin'), data.validated_data['statut'])
+        services.resilier_contrat(contrat, data.validated_data.get('date_fin'), data.validated_data['statut'],
+                                  par=request.user)
         return Response(self.get_serializer(contrat).data)
 
 
@@ -142,7 +169,7 @@ class PaiementViewSet(ScopedViewSet):
         data.is_valid(raise_exception=True)
         services.enregistrer_versement(
             paiement, data.validated_data['montant'], data.validated_data.get('mode_paiement', ''),
-            data.validated_data.get('date_versement'))
+            data.validated_data.get('date_versement'), par=request.user)
         return Response(self.get_serializer(paiement).data)
 
     @extend_schema(request=sz.GenererMoisSerializer, responses={200: dict})
@@ -193,12 +220,10 @@ class ReservationViewSet(ScopedViewSet):
     ordering_fields = ['created_at', 'date_arrivee', 'montant_total']
 
     def perform_create(self, serializer):
-        d = serializer.validated_data
-        conflits = services.reservations_en_conflit(d['bien'], d['date_arrivee'], d.get('date_depart'))
-        if conflits:
-            raise ValidationError({'date_arrivee': 'Ces dates sont déjà réservées pour ce bien.'})
-        serializer.save(montant_total=services.calculer_montant_reservation(
-            d['bien'], d['date_arrivee'], d.get('date_depart')))
+        # Même chemin que le site public : bien disponible, pas de double réservation, montant calculé.
+        donnees = dict(serializer.validated_data)
+        bien = donnees.pop('bien')
+        serializer.instance = services.creer_reservation(bien, notifier_gestion=False, **donnees)
 
     @extend_schema(request=sz.StatutSerializer, responses=sz.ReservationSerializer)
     @action(detail=True, methods=['post'])
@@ -206,8 +231,7 @@ class ReservationViewSet(ScopedViewSet):
         reservation = self.get_object()
         data = sz.StatutSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        reservation.statut = data.validated_data['statut']
-        reservation.save(update_fields=['statut'])
+        services.changer_statut_reservation(reservation, data.validated_data['statut'])
         return Response(self.get_serializer(reservation).data)
 
     @extend_schema(request=None, responses=sz.ContratSerializer)
@@ -323,6 +347,7 @@ class DashboardView(APIView):
                 'montant_retard': (retards.aggregate(t=Sum('montant_du'))['t'] or 0)
                                   - (retards.aggregate(t=Sum('montant_paye'))['t'] or 0),
                 'demandes_non_traitees': demandes.count(), 'reservations_a_traiter': reservations.count(),
+                'biens_sans_proprietaire': biens.filter(parts__isnull=True).count(),
             },
             'revenus': serie,
             'repartition_biens': [{'statut': k, 'nombre': v} for k, v in par_statut.items()],
@@ -469,3 +494,89 @@ class CalendrierView(APIView):
             raise ValidationError({'fin': 'La période doit être positive et ne pas dépasser 3 mois.'})
         return Response({'evenements': services.evenements_calendrier(
             proprietaires_visibles(request.user), debut, fin)})
+
+
+class EquipementViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.DestroyModelMixin,
+                        viewsets.GenericViewSet):
+    """Catalogue d'équipements partagé : on peut en ajouter, et supprimer ceux qu'aucun bien n'utilise."""
+    permission_classes = [IsGestionnaire]
+    serializer_class = sz.EquipementSerializer
+    pagination_class = None
+    filterset_fields = ['categorie']
+    search_fields = ['nom']
+    queryset = Equipement.objects.annotate(nb_biens=Count('biens'))
+
+    def perform_destroy(self, instance):
+        if instance.biens.exists():
+            raise ValidationError({'detail': f'« {instance.nom} » est utilisé par {instance.biens.count()} bien(s).'})
+        super().perform_destroy(instance)
+
+
+class ProprietaireViewSet(ScopedViewSet):
+    """Propriétaires (mandants) : plusieurs par bien, avec quotes-parts, commission et relevé de reversement."""
+    queryset = Proprietaire.objects.annotate(nb_biens=Count('parts')).order_by('nom', 'prenom')
+    serializer_class = sz.ProprietaireSerializer
+    scope_path = 'gestionnaire'
+    filterset_fields = ['actif', 'type_proprietaire']
+    search_fields = ['nom', 'prenom', 'email', 'telephone']
+    ordering_fields = ['nom', 'created_at']
+
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related('parts__bien')
+
+    def perform_create(self, serializer):
+        serializer.save(gestionnaire=self.request.user)
+
+    def perform_destroy(self, instance):
+        services.verifier_suppression_proprietaire(instance)
+        super().perform_destroy(instance)
+
+    @extend_schema(responses={200: dict})
+    @action(detail=True, methods=['get'])
+    def releve(self, request, pk=None):
+        """Décompte de reversement du mois (?mois=AAAA-MM-JJ, défaut : mois courant)."""
+        try:
+            mois = date.fromisoformat(request.query_params['mois']) if request.query_params.get('mois') else None
+        except ValueError:
+            raise ValidationError({'mois': 'Date attendue au format AAAA-MM-JJ.'})
+        return Response(services.releve_proprietaire(self.get_object(), mois))
+
+
+
+    @extend_schema(request=None, responses={200: dict})
+    @action(detail=True, methods=['post'], url_path='envoyer-releve')
+    def envoyer_releve(self, request, pk=None):
+        """Envoie le relevé du mois (?mois=AAAA-MM-JJ, défaut : mois précédent) au propriétaire, selon ses canaux."""
+        from gestion import alertes
+        try:
+            mois = date.fromisoformat(request.query_params['mois']) if request.query_params.get('mois') else None
+        except ValueError:
+            raise ValidationError({'mois': 'Date attendue au format AAAA-MM-JJ.'})
+        prop = self.get_object()
+        envois = alertes.envoyer_releve_a(prop, mois)
+        if not envois:
+            raise ValidationError({'detail': "Rien à envoyer : ce propriétaire n'a aucun bien, ou n'a activé aucun canal "
+                                             "(email / WhatsApp) avec une adresse ou un numéro."})
+        return Response({'resultats': [{'canal': e.canal, 'adresse': e.adresse, 'statut': e.statut, 'erreur': e.erreur}
+                                       for e in envois]})
+
+
+class CoherenceView(APIView):
+    """Incohérences de données détectées dans le périmètre de l'utilisateur."""
+    permission_classes = [IsGestionnaire]
+
+    @extend_schema(responses={200: dict})
+    def get(self, request):
+        anomalies = services.verifier_coherence(proprietaires_visibles(request.user), request.user)
+        return Response({
+            'total': len(anomalies),
+            'erreurs': sum(a['gravite'] == 'erreur' for a in anomalies),
+            'avertissements': sum(a['gravite'] == 'avertissement' for a in anomalies),
+            'anomalies': anomalies,
+        })
+
+    @extend_schema(request=None, responses={200: dict})
+    def post(self, request):
+        """Corrige automatiquement ce qui est sans risque : le statut des biens est réaligné sur leurs contrats."""
+        corriges = services.corriger_statuts_biens(proprietaires_visibles(request.user))
+        return Response({'biens_corriges': corriges})

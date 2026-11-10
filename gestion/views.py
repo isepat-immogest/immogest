@@ -1,3 +1,7 @@
+from datetime import date
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+from .models import Contrat, Paiement
 from django import forms # type: ignore
 from django.shortcuts import render, get_object_or_404, redirect # type: ignore
 from django.contrib.auth.decorators import login_required # type: ignore
@@ -14,7 +18,7 @@ from django.views.decorators.http import require_POST # type: ignore
 import csv
 import json
 from datetime import date, timedelta
-from .models import Bien, Locataire, Contrat, Paiement, Intervention, DemandeContact, Reservation
+from .models import Bien, BienPhoto, Locataire, Contrat, Paiement, Intervention, DemandeContact, Reservation
 from .forms import (BienForm, LocataireForm, ContratForm,
                     PaiementForm, InterventionForm, ReservationForm)
 from .pdf_utils import generer_quittance_pdf, generer_rapport_financier_pdf
@@ -175,7 +179,7 @@ def dashboard(request):
 
 @login_required
 def biens_list(request):
-    qs = Bien.objects.filter(proprietaire__in=proprietaires_visibles(request.user))
+    qs = Bien.objects.filter(proprietaire__in=proprietaires_visibles(request.user)).prefetch_related('contrats__locataire')
     statut = request.GET.get('statut', '')
     q = request.GET.get('q', '')
     if statut:
@@ -195,6 +199,72 @@ def bien_detail(request, pk):
         'bien': bien, 'contrats': contrats,
         'interventions': interventions, 'paiements': paiements
     })
+
+
+PHOTOS_MAX_PAR_BIEN = 30
+PHOTO_TAILLE_MAX = 8 * 1024 * 1024  # 8 Mo
+
+
+@login_required
+@require_POST
+def bien_photos_ajouter(request, pk):
+    """Ajoute une ou plusieurs photos à la galerie d'un bien."""
+    bien = get_object_or_404(Bien, pk=pk, proprietaire__in=proprietaires_visibles(request.user))
+    fichiers = request.FILES.getlist('photos')
+    if not fichiers:
+        messages.error(request, 'Choisissez au moins une photo.')
+        return redirect('bien_detail', pk=pk)
+    place = PHOTOS_MAX_PAR_BIEN - bien.photos.count()
+    if place <= 0:
+        messages.error(request, f'Limite atteinte : {PHOTOS_MAX_PAR_BIEN} photos par bien.')
+        return redirect('bien_detail', pk=pk)
+    legende = request.POST.get('legende', '').strip()[:120]
+    ordre = bien.photos.order_by('-ordre').values_list('ordre', flat=True).first() or 0
+    ajoutees, refusees = 0, []
+    for fichier in fichiers[:place]:
+        if fichier.size > PHOTO_TAILLE_MAX:
+            refusees.append(f'{fichier.name} (plus de 8 Mo)')
+            continue
+        try:
+            forms.ImageField().clean(fichier)  # vérifie que c'est une vraie image
+        except forms.ValidationError:
+            refusees.append(f'{fichier.name} (image invalide)')
+            continue
+        ordre += 1
+        BienPhoto.objects.create(bien=bien, image=fichier, ordre=ordre,
+                                 legende=legende if len(fichiers) == 1 else '')
+        ajoutees += 1
+    if ajoutees:
+        messages.success(request, f'{ajoutees} photo{"s" if ajoutees > 1 else ""} ajoutée{"s" if ajoutees > 1 else ""}.')
+    if refusees:
+        messages.error(request, 'Non ajoutées : ' + ', '.join(refusees) + '.')
+    if len(fichiers) > place:
+        messages.warning(request, f'Seules {place} photo(s) pouvaient encore être ajoutées (limite de {PHOTOS_MAX_PAR_BIEN}).')
+    return redirect('bien_detail', pk=pk)
+
+
+@login_required
+@require_POST
+def bien_photo_supprimer(request, pk, photo_pk):
+    bien = get_object_or_404(Bien, pk=pk, proprietaire__in=proprietaires_visibles(request.user))
+    photo = get_object_or_404(BienPhoto, pk=photo_pk, bien=bien)
+    photo.image.delete(save=False)
+    photo.delete()
+    messages.success(request, 'Photo supprimée.')
+    return redirect('bien_detail', pk=pk)
+
+
+@login_required
+@require_POST
+def bien_photo_principale(request, pk, photo_pk):
+    """Place une photo de la galerie en tête (elle devient la photo affichée dans les listes)."""
+    bien = get_object_or_404(Bien, pk=pk, proprietaire__in=proprietaires_visibles(request.user))
+    photo = get_object_or_404(BienPhoto, pk=photo_pk, bien=bien)
+    premier = bien.photos.exclude(pk=photo.pk).order_by('ordre').values_list('ordre', flat=True).first()
+    photo.ordre = (premier - 1) if premier is not None else 0
+    photo.save(update_fields=['ordre'])
+    messages.success(request, 'Photo placée en premier.')
+    return redirect('bien_detail', pk=pk)
 
 
 @login_required
@@ -689,4 +759,33 @@ def espace_locataire_mot_de_passe(request):
         form = PasswordChangeForm(request.user)
     return render(request, 'gestion/locataire_espace/mot_de_passe.html', {
         'locataire': request.user.locataire_profile, 'form': form,
+    })
+
+
+@login_required
+def etat_loyers(request):
+    mois = date.today().replace(day=1)
+
+    contrats = (Contrat.objects
+                .filter(statut='actif', bien__proprietaire__in=proprietaires_visibles(request.user))
+                .select_related('bien', 'locataire'))
+
+    paiements = {
+        p.contrat_id: p
+        for p in Paiement.objects.filter(contrat__in=contrats, mois=mois)
+    }
+
+    en_regle, en_retard = [], []
+    for c in contrats:
+        p = paiements.get(c.id)
+        if p and p.montant_paye >= p.montant_du:
+            en_regle.append((c, p))
+        else:
+            en_retard.append((c, p))
+
+    return render(request, 'gestion/etat_loyers.html', {
+        'mois': mois,
+        'en_regle': en_regle,
+        'en_retard': en_retard,
+        'groupes': [('À régulariser', en_retard), ('En règle', en_regle)],
     })

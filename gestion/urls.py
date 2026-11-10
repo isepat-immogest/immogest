@@ -5,12 +5,16 @@ urlpatterns = [
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('', views.dashboard, name='dashboard'),
+    path('loyers/', views.etat_loyers, name='etat_loyers'),
 
     # Biens
     path('biens/', views.biens_list, name='biens_list'),
     path('biens/ajouter/', views.bien_create, name='bien_create'),
     path('biens/<int:pk>/', views.bien_detail, name='bien_detail'),
     path('biens/<int:pk>/modifier/', views.bien_edit, name='bien_edit'),
+    path('biens/<int:pk>/photos/ajouter/', views.bien_photos_ajouter, name='bien_photos_ajouter'),
+    path('biens/<int:pk>/photos/<int:photo_pk>/supprimer/', views.bien_photo_supprimer, name='bien_photo_supprimer'),
+    path('biens/<int:pk>/photos/<int:photo_pk>/principale/', views.bien_photo_principale, name='bien_photo_principale'),
     path('biens/<int:pk>/supprimer/', views.bien_delete, name='bien_delete'),
 
     # Locataires
