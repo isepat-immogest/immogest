@@ -167,13 +167,14 @@ if env_bool('EMAIL_USE_SMTP', False):
     EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
     EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
     EMAIL_USE_TLS = env_bool('EMAIL_USE_TLS', True)
+    EMAIL_USE_SSL = env_bool('EMAIL_USE_SSL', False)
+    EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', 30))
     EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
     EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
     DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
 else:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
     DEFAULT_FROM_EMAIL = 'noreply@immogest.local'
-
 
 # ── API REST (DRF) ────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
