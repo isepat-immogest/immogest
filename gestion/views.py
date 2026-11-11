@@ -269,11 +269,13 @@ def bien_photo_principale(request, pk, photo_pk):
 
 @login_required
 def bien_create(request):
-    form = BienForm(request.POST or None, request.FILES or None)
+    form = BienForm(request.POST or None, request.FILES or None, user=request.user)
     if form.is_valid():
         b = form.save(commit=False)
         b.proprietaire = request.user
         b.save()
+        form.save_m2m()
+        form.enregistrer_proprietaires(b)
         messages.success(request, 'Bien ajouté avec succès.')
         return redirect('bien_detail', pk=b.pk)
     return render(request, 'gestion/bien_form.html', {'form': form, 'title': 'Ajouter un bien'})
@@ -282,9 +284,10 @@ def bien_create(request):
 @login_required
 def bien_edit(request, pk):
     bien = get_object_or_404(Bien, pk=pk, proprietaire__in=proprietaires_visibles(request.user))
-    form = BienForm(request.POST or None, request.FILES or None, instance=bien)
+    form = BienForm(request.POST or None, request.FILES or None, instance=bien, user=request.user)
     if form.is_valid():
         form.save()
+        form.enregistrer_proprietaires(bien)
         messages.success(request, 'Bien modifié.')
         return redirect('bien_detail', pk=pk)
     return render(request, 'gestion/bien_form.html', {'form': form, 'title': 'Modifier le bien'})
