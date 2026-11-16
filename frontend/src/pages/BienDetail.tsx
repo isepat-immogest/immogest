@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 
 import { EmptyState, ErrorState, PageHeader, StatusBadge } from '@/components/common'
 import { DocumentsPanel } from '@/components/DocumentsPanel'
+import { GaleriePanel } from '@/components/GaleriePanel'
 import { ProprietairesPanel } from '@/components/ProprietairesPanel'
 import { FormDialog } from '@/components/FormDialog'
 import { Badge } from '@/components/ui/badge'
@@ -54,7 +55,7 @@ export default function BienDetail() {
       />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="overflow-hidden lg:col-span-1">
-          {b.photo ? <img src={b.photo} alt={b.nom} className="h-52 w-full object-cover" /> : <div className="flex h-52 items-center justify-center bg-muted text-muted-foreground">Pas de photo</div>}
+          {(b.vignette ?? b.photo) ? <img src={(b.vignette ?? b.photo) as string} alt={b.nom} className="h-52 w-full object-cover" /> : <div className="flex h-52 items-center justify-center bg-muted text-muted-foreground">Pas de photo</div>}
           <CardContent className="pt-4">
             <dl className="grid grid-cols-2 gap-4">
               <Info label="Type" value={b.type_display} />
@@ -102,6 +103,8 @@ export default function BienDetail() {
         </Card>
 
         <div className="lg:col-span-1"><ProprietairesPanel bien={b} /></div>
+
+        <div className="lg:col-span-3"><GaleriePanel bienId={b.id} nom={b.nom} /></div>
 
         <div className="lg:col-span-3">
           <Tabs defaultValue="paiements">

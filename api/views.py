@@ -42,7 +42,7 @@ class BienViewSet(ScopedViewSet):
 
     def get_queryset(self):
         return super().get_queryset().prefetch_related(
-            'equipements', 'parts__proprietaire',
+            'equipements', 'parts__proprietaire', 'photos',
             Prefetch('contrats', queryset=Contrat.objects.filter(statut='actif').select_related('locataire'),
                      to_attr='_contrats_actifs'))
 

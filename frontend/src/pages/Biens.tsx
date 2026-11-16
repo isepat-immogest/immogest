@@ -76,7 +76,7 @@ export default function Biens() {
                 <TableRow key={b.id}>
                   <TableCell>
                     <Link to={`/biens/${b.id}`} className="flex items-center gap-3 font-medium hover:underline">
-                      {b.photo ? <img src={b.photo} alt="" loading="lazy" className="h-10 w-10 rounded-md object-cover" /> : <div className="h-10 w-10 rounded-md bg-muted" />}
+                      {(b.vignette ?? b.photo) ? <img src={(b.vignette ?? b.photo) as string} alt="" loading="lazy" className="h-10 w-10 rounded-md object-cover" /> : <div className="h-10 w-10 rounded-md bg-muted" />}
                       {b.nom}
                     </Link>
                   </TableCell>

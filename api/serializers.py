@@ -57,6 +57,7 @@ class BienSerializer(CleanedModelSerializer):
     equipements_detail = serializers.SerializerMethodField()
     proprietaires_detail = serializers.SerializerMethodField()
     quotes_parts_total = serializers.SerializerMethodField()
+    vignette = serializers.SerializerMethodField()
     # À la création : propriétaire unique à 100 % (pour plusieurs propriétaires : /biens/{id}/proprietaires/).
     proprietaire_principal = serializers.PrimaryKeyRelatedField(
         queryset=Proprietaire.objects.all(), write_only=True, required=False, allow_null=True)
@@ -91,6 +92,15 @@ class BienSerializer(CleanedModelSerializer):
     def get_proprietaires_detail(self, obj):
         return [{'proprietaire': p.proprietaire_id, 'nom': str(p.proprietaire), 'quote_part': p.quote_part,
                  'telephone': p.proprietaire.telephone} for p in obj.parts.all()]
+
+    @extend_schema_field(str)
+    def get_vignette(self, obj):
+        """Image des listes : la photo principale, sinon la première photo de la galerie."""
+        fichier = obj.photo or next((p.image for p in obj.photos.all()), None)
+        if not fichier:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(fichier.url) if request else fichier.url
 
     @extend_schema_field(float)
     def get_quotes_parts_total(self, obj):

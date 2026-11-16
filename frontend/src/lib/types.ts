@@ -39,6 +39,7 @@ export interface Bien {
   depot_garantie: string
   description: string
   photo: string | null
+  vignette: string | null
   nb_chambres: number
   nb_salles_bain: number
   meuble: boolean

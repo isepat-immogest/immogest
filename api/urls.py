@@ -3,7 +3,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView  # 
 from rest_framework.routers import DefaultRouter  # type: ignore
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView  # type: ignore
 
-from . import auth_views, espace_views, notif_views, public_views, views
+from . import auth_views, espace_views, galerie_views, notif_views, public_views, views
 
 router = DefaultRouter()
 router.register('biens', views.BienViewSet, basename='bien')
@@ -39,6 +39,9 @@ urlpatterns = [
     path('dashboard/', views.DashboardView.as_view()),
     path('recherche/', views.SearchView.as_view()),
     path('coherence/', views.CoherenceView.as_view()),
+    path('biens/<int:pk>/galerie/', galerie_views.GalerieView.as_view()),
+    path('biens/<int:pk>/galerie/<str:photo_id>/', galerie_views.PhotoGalerieView.as_view()),
+    path('biens/<int:pk>/galerie/<int:photo_id>/en-tete/', galerie_views.PhotoEnTeteView.as_view()),
     path('me/notifications/', notif_views.PreferencesNotificationView.as_view()),
     path('me/notifications/test/', notif_views.TestNotificationView.as_view()),
     path('me/notifications/envois/', notif_views.EnvoisNotificationList.as_view()),
