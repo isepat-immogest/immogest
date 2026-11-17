@@ -27,3 +27,4 @@ frontend/dist/
 
 immogest-github/
 db.sqlite3.*
+*.bak_*
